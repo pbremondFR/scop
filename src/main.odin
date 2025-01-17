@@ -36,6 +36,8 @@ import "core:strings"
 import "base:runtime"
 
 import "core:os"
+import "core:math/linalg"
+import "core:math"
 
 // Odin has type type inference
 // variableName := value
@@ -61,30 +63,15 @@ State :: struct {
 state := State{
 }
 
-Error :: enum {
-	None,
-	Something_Bad,
-	Something_Worse,
-	The_Worst,
-	Your_Mum,
-}
+Mat4f :: matrix[4, 4]f32
 
-caller_1 :: proc() -> Error {
-	return .Something_Bad
-}
-
-caller_2 :: proc() -> (int, Error) {
-	return 123, .None
-}
-caller_3 :: proc() -> (int, int, Error) {
-	return 123, 345, .None
-}
-
-test_1 :: proc() -> bool {
-	return true
-}
-test_2 :: proc() -> (int, bool) {
-	return 123, false
+get_unit_matrix :: proc() -> Mat4f {
+	return Mat4f{
+		1.0, 0.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0,
+		0.0, 0.0, 0.0, 1.0,
+	}
 }
 
 // The main function is the entry point for the application
@@ -170,18 +157,18 @@ main :: proc() {
 	fmt.println("======= NORMALS =======", obj_data.normals)
 	fmt.println("======= FACES =======", obj_data.faces)
 
-	// vertices :[]Vec3f = obj_data.vertices[:]
+	vertices :[]Vec3f = obj_data.vertices[:]
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
 	defer gl.DeleteProgram(shader_program)
 
-	vertices := [?]f32{
-		-0.5, -0.5, 0.0,
-		 0.5, -0.5, 0.0,
-		 0.0,  0.5, 0.0
-	};
+	// vertices := [?]f32{
+	// 	-0.5, -0.5, 0.0,
+	// 	 0.5, -0.5, 0.0,
+	// 	 0.0,  0.5, 0.0
+	// };
 
 	// Setup buffers and everything idk what I'm doing
 	vao, vbo: u32
@@ -209,13 +196,31 @@ main :: proc() {
 		// https://www.glfw.org/docs/3.3/group__window.html#ga37bd57223967b4211d60ca1a0bf3c832
 		glfw.PollEvents()
 
-		update()
-		// draw()
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 
 		gl.UseProgram(shader_program)
+
+		radius :f32 = 10.0
+		cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
+		view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, false)
+
+		model_matrix := linalg.MATRIX4F32_IDENTITY
+		// model_matrix := linalg.matrix4_rotate_f32(math.to_radians_f32(-55.0), Vec3f{1.0, 0.0, 0.0})
+		// view_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, 0.0, 3.0})
+		proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100, false)
+
+		model_loc := gl.GetUniformLocation(shader_program, "model")
+		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
+
+		view_loc := gl.GetUniformLocation(shader_program, "view")
+		gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, &view_matrix[0, 0])
+
+		proj_loc := gl.GetUniformLocation(shader_program, "projection")
+		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
+
 		gl.BindVertexArray(vao)
-		gl.DrawArrays(gl.TRIANGLES, 0, 3)
+		gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(vertices))
+		// gl.DrawElements(gl.TRIANGLES, cast(i32)len(vertices), gl.UNSIGNED_INT, raw_data(vertices))
 
 		// This function swaps the front and back buffers of the specified window.
 		// See https://en.wikipedia.org/wiki/Multiple_buffering to learn more about Multiple buffering
@@ -223,27 +228,11 @@ main :: proc() {
 		glfw.SwapBuffers(window)
 	}
 
-	exit()
-
 }
 
 
 init :: proc(){
 	// Own initialization code there
-}
-
-update :: proc(){
-	// Own update code here
-}
-
-draw :: proc(){
-	// Set the opengl clear color
-	// 0-1 rgba values
-	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
-	// Clear the screen with the set clearcolor
-	gl.Clear(gl.COLOR_BUFFER_BIT)
-
-	// Own drawing code here
 }
 
 exit :: proc(){
