@@ -158,6 +158,19 @@ main :: proc() {
 
 	init()
 
+	obj_data, map_ok := parse_obj_file("resources/42.obj")
+	if !map_ok {
+		fmt.println("fuck")
+		return
+	}
+	defer delete_ObjFileData(obj_data)
+
+	fmt.println("======= VERTICES =======", obj_data.vertices)
+	fmt.println("======= TEXT COORDS =======", obj_data.tex_coords)
+	fmt.println("======= NORMALS =======", obj_data.normals)
+	fmt.println("======= FACES =======", obj_data.faces)
+
+	// vertices :[]Vec3f = obj_data.vertices[:]
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
@@ -180,7 +193,7 @@ main :: proc() {
 	gl.BindVertexArray(vao)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, size_of(vertices), &vertices[0], gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(vertices[0]), &vertices[0], gl.STATIC_DRAW)
 
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(vertices[0]), 0)
 	gl.EnableVertexAttribArray(0)
