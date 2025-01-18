@@ -145,7 +145,7 @@ main :: proc() {
 
 	init()
 
-	obj_data, map_ok := parse_obj_file("resources/42.obj")
+	obj_data, map_ok := parse_obj_file("resources/teapot.obj")
 	if !map_ok {
 		fmt.println("fuck")
 		return
@@ -157,7 +157,7 @@ main :: proc() {
 	fmt.println("======= NORMALS =======", obj_data.normals)
 	fmt.println("======= FACES =======", obj_data.faces)
 
-	vertices :[]Vec3f = obj_data.vertices[:]
+	// vertices :[]Vec3f = obj_data.vertices[:]
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
@@ -171,18 +171,23 @@ main :: proc() {
 	// };
 
 	// Setup buffers and everything idk what I'm doing
-	vao, vbo: u32
+	vao, vbo, ebo: u32
 	gl.GenVertexArrays(1, &vao)
 	defer gl.DeleteVertexArrays(1, &vao)
 	gl.GenBuffers(1, &vbo)
 	defer gl.DeleteBuffers(1, &vbo)
+	gl.GenBuffers(1, &ebo)
+	defer gl.DeleteBuffers(1, &ebo)
 
 	gl.BindVertexArray(vao)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(vertices[0]), &vertices[0], gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]), &obj_data.vertices[0], gl.STATIC_DRAW)
 
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(vertices[0]), 0)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.faces) * size_of(obj_data.faces[0]), &obj_data.faces[0], gl.STATIC_DRAW)
+
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(obj_data.vertices[0]), 0)
 	gl.EnableVertexAttribArray(0)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
@@ -219,8 +224,10 @@ main :: proc() {
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
-		gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(vertices))
-		// gl.DrawElements(gl.TRIANGLES, cast(i32)len(vertices), gl.UNSIGNED_INT, raw_data(vertices))
+		// gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(vertices))
+
+		// gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
+		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.faces), gl.UNSIGNED_SHORT, nil)
 
 		// This function swaps the front and back buffers of the specified window.
 		// See https://en.wikipedia.org/wiki/Multiple_buffering to learn more about Multiple buffering

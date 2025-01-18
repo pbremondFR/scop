@@ -18,7 +18,7 @@ ObjFileData :: struct {
 	vertices:	[dynamic]Vec3f,
 	tex_coords:	[dynamic]Vec3f,
 	normals:	[dynamic]Vec3f,
-	faces:		[dynamic]Vec3f,
+	faces:		[dynamic][3]u16,
 }
 
 delete_ObjFileData :: proc(data: ObjFileData) {
@@ -62,12 +62,14 @@ parse_vertex_normal :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool
 
 parse_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	assert(len(split_str) >= 3)
-	vertex := Vec3f{
-		strconv.parse_f32(split_str[0]) or_return,
-		strconv.parse_f32(split_str[1]) or_return,
-		strconv.parse_f32(split_str[2]) or_return,
+	for i in 1..=len(split_str) - 2 {
+		vertex := [3]u16{
+			cast(u16)strconv.parse_u64(split_str[0]) or_return,
+			cast(u16)strconv.parse_u64(split_str[i]) or_return,
+			cast(u16)strconv.parse_u64(split_str[i + 1]) or_return,
+		}
+		append(&obj_data.faces, vertex)
 	}
-	append(&obj_data.normals, vertex)
 	return true
 }
 
