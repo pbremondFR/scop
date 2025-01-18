@@ -25,6 +25,7 @@ delete_ObjFileData :: proc(data: ObjFileData) {
 	delete(data.vertices)
 	delete(data.tex_coords)
 	delete(data.normals)
+	delete(data.faces)
 }
 
 parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
@@ -60,9 +61,13 @@ parse_vertex_normal :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool
 	return true
 }
 
+// Use this very simple algorithm to decompose a 4+ indices polygon into triangles
+// https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
+// https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
 parse_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
+		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
 		vertex := [3]u16{
 			cast(u16)strconv.parse_u64(split_str[0]) or_return - 1,
 			cast(u16)strconv.parse_u64(split_str[i]) or_return - 1,
@@ -73,17 +78,11 @@ parse_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	return true
 }
 
-// To build a better parser:
-// https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
-// https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
-
-// Very basic .obj file parser for testing
-
 parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: bool) {
 	using virtual.Map_File_Flag
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
-		fmt.println("Error:", err)
+		fmt.printfln("Error mapping `%v`: %v", obj_file_path, err)
 		return
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))

@@ -39,11 +39,7 @@ import "core:os"
 import "core:math/linalg"
 import "core:math"
 
-// Odin has type type inference
-// variableName := value
-// variableName : type = value
 // You can set constants with ::
-
 WINDOW_NAME :: "ft_scop"
 
 // GL_VERSION define the version of OpenGL to use. Here we use 4.6 which is the newest version
@@ -53,14 +49,17 @@ GL_MAJOR_VERSION : c.int : 4
 // Constant with type inference
 GL_MINOR_VERSION :: 6
 
-// Our own boolean storing if the application is running
-// We use b32 for allignment and easy compatibility with the glfw.WindowShouldClose procedure
-// See https://odin-lang.org/docs/overview/#basic-types for more information on the types in Odin
 State :: struct {
+	window_size: [2]i32,
+	pan: f32,
+	fov: f32,
 	buf: string,
 }
 
 state := State{
+	window_size = {1024, 1024},
+	pan = -15.0,
+	fov = math.to_radians_f32(70.0),
 }
 
 Mat4f :: matrix[4, 4]f32
@@ -74,21 +73,11 @@ get_unit_matrix :: proc() -> Mat4f {
 	}
 }
 
-// The main function is the entry point for the application
-// In Odin functions/methods are more precisely named procedures
-// procedureName :: proc() -> returnType
-// https://odin-lang.org/docs/overview/#procedures
 main :: proc() {
 
-	// Initialize glfw
 	// GLFW_TRUE if successful, or GLFW_FALSE if an error occurred.
-	// GLFW_TRUE = 1
-	// GLFW_FALSE = 0
-	// https://www.glfw.org/docs/latest/group__init.html#ga317aac130a235ab08c6db0834907d85e
 	if(glfw.Init() != true){
-		// Print Line
 		fmt.println("Failed to initialize GLFW")
-		// Return early
 		return
 	}
 	// Set Window Hints
@@ -98,17 +87,11 @@ main :: proc() {
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-	// the defer keyword makes the procedure run when the calling procedure exits scope
-	// Deferes are executed in reverse order. So the window will get destoryed first
-	// They can also just be called manually later instead without defer. This way of doing it ensures are terminated.
-	// https://odin-lang.org/docs/overview/#defer-statement
 	// https://www.glfw.org/docs/3.1/group__init.html#gaaae48c0a18607ea4a4ba951d939f0901
 	defer glfw.Terminate()
 
-	// Create the window
-	// Return WindowHandle rawPtr
 	// https://www.glfw.org/docs/3.3/group__window.html#ga3555a418df92ad53f917597fe2f64aeb
-	window := glfw.CreateWindow(512, 512, WINDOW_NAME, nil, nil)
+	window := glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
 	// https://www.glfw.org/docs/latest/group__window.html#gacdf43e51376051d2c091662e9fe3d7b2
 	defer glfw.DestroyWindow(window)
 
@@ -118,7 +101,6 @@ main :: proc() {
 		return
 	}
 
-	//
 	// https://www.glfw.org/docs/3.3/group__context.html#ga1c04dc242268f827290fe40aa1c91157
 	glfw.MakeContextCurrent(window)
 
@@ -143,32 +125,22 @@ main :: proc() {
 	// This is needed because the GL_MAJOR_VERSION has an explicit type of c.int
 	gl.load_up_to(int(GL_MAJOR_VERSION), GL_MINOR_VERSION, glfw.gl_set_proc_address)
 
-	init()
-
+	// Get desired .obj file from program arguments. main() doesn't take args,
+	// it's nore like in Python with os.args
 	file_path := os.args[1] if len(os.args) >= 2 else "resources/teapot.obj"
 	obj_data, obj_ok := parse_obj_file(file_path)
 	if !obj_ok {
-		fmt.println("fuck")
+		fmt.printfln("Failed to load `%v`", file_path)
 		return
 	}
 	defer delete_ObjFileData(obj_data)
-
-	// After buffer creation:
-	fmt.printf("Vertex count: %d\n", len(obj_data.vertices))
-	fmt.printf("Face count: %d\n", len(obj_data.faces))
-	fmt.printf("First few faces: %v\n", obj_data.faces[0:min(5, len(obj_data.faces))])
-
-	// fmt.println("======= VERTICES =======", obj_data.vertices)
-	// fmt.println("======= TEXT COORDS =======", obj_data.tex_coords)
-	// fmt.println("======= NORMALS =======", obj_data.normals)
-	// fmt.println("======= FACES =======", obj_data.faces)
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
 	defer gl.DeleteProgram(shader_program)
 
-	// Setup buffers and everything idk what I'm doing
+	// Setup VAO, VBO, EBO
 	vao, vbo, ebo: u32
 	gl.GenVertexArrays(1, &vao)
 	defer gl.DeleteVertexArrays(1, &vao)
@@ -204,15 +176,17 @@ main :: proc() {
 
 		gl.UseProgram(shader_program)
 
+		// TODO: Make your own matrices! Using a library is forbidden for this project.
 		// radius :f32 = 5.0
 		// cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
 		// model_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, -1.5, 0.0})
 		// view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0})
 		// proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
 
+		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
 		model_matrix := linalg.matrix4_rotate_f32(cast(f32)glfw.GetTime(), {0.0, 1.0, 0.0})
-		view_matrix := linalg.matrix4_translate_f32({0.0, -1., -15.0})
-		proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
+		view_matrix := linalg.matrix4_translate_f32({0.0, -1., state.pan})
+		proj_matrix := linalg.matrix4_perspective_f32(state.fov, aspect_ratio, 0.1, 100)
 
 		model_loc := gl.GetUniformLocation(shader_program, "model")
 		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
@@ -224,29 +198,14 @@ main :: proc() {
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
-		// gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(vertices))
-
-		// gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.faces) * 3, gl.UNSIGNED_SHORT, nil)
 
-		// This function swaps the front and back buffers of the specified window.
-		// See https://en.wikipedia.org/wiki/Multiple_buffering to learn more about Multiple buffering
-		// https://www.glfw.org/docs/3.0/group__context.html#ga15a5a1ee5b3c2ca6b15ca209a12efd14
 		glfw.SwapBuffers(window)
 	}
 
 }
 
 
-init :: proc(){
-	// Own initialization code there
-}
-
-exit :: proc(){
-	// Own termination code here
-}
-
-// Called when glfw keystate changes
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	context = runtime.default_context()
 
@@ -263,14 +222,21 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		// You can also use C-style ternaries! YAAAAY
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
 	}
+	else if (key == glfw.KEY_UP || key == glfw.KEY_DOWN) {
+		delta := 1 if key == glfw.KEY_UP else -1
+		state.pan += f32(delta)
+	}
+	else if (key == glfw.KEY_LEFT || key == glfw.KEY_RIGHT) {
+		delta :f32 = 3.0 if key == glfw.KEY_LEFT else -3.0
+		state.fov += math.to_radians_f32(delta)
+	}
 	else if (key >= glfw.KEY_A && key <= glfw.KEY_Z || key == glfw.KEY_SPACE) && action == glfw.PRESS {
 		key_char := u8(key)
 		fmt.printfln("Alpha key pressed: %c", key_char)
 	}
 }
 
-// Called when glfw window changes size
 size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
-	// Set the OpenGL viewport size
 	gl.Viewport(0, 0, width, height)
+	state.window_size = {width, height}
 }
