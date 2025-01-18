@@ -62,8 +62,6 @@ state := State{
 	fov = math.to_radians_f32(70.0),
 }
 
-Mat4f :: matrix[4, 4]f32
-
 get_unit_matrix :: proc() -> Mat4f {
 	return Mat4f{
 		1.0, 0.0, 0.0, 0.0,
@@ -176,17 +174,12 @@ main :: proc() {
 
 		gl.UseProgram(shader_program)
 
-		// TODO: Make your own matrices! Using a library is forbidden for this project.
-		// radius :f32 = 5.0
-		// cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
-		// model_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, -1.5, 0.0})
-		// view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0})
-		// proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
-
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
-		model_matrix := linalg.matrix4_rotate_f32(cast(f32)glfw.GetTime(), {0.0, 1.0, 0.0})
-		view_matrix := linalg.matrix4_translate_f32({0.0, -1., state.pan})
-		proj_matrix := linalg.matrix4_perspective_f32(state.fov, aspect_ratio, 0.1, 500)
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)glfw.GetTime())
+		view_matrix := UNIT_MAT4F
+		view_matrix[3][1] = -1.0
+		view_matrix[3][2] = state.pan
+		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
 		model_loc := gl.GetUniformLocation(shader_program, "model")
 		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
