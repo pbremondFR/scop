@@ -155,7 +155,7 @@ main :: proc() {
 	gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]), &obj_data.vertices[0], gl.STATIC_DRAW)
 
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.faces) * size_of(obj_data.faces[0]), &obj_data.faces[0], gl.STATIC_DRAW)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.vert_idx) * size_of(obj_data.vert_idx[0]), &obj_data.vert_idx[0], gl.STATIC_DRAW)
 
 	gl.EnableVertexAttribArray(0)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(Vec3f), 0)
@@ -198,7 +198,7 @@ main :: proc() {
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
-		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.faces) * 3, gl.UNSIGNED_SHORT, nil)
+		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.vert_idx) * 3, gl.UNSIGNED_INT, nil)
 
 		glfw.SwapBuffers(window)
 	}
