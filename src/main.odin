@@ -145,7 +145,8 @@ main :: proc() {
 
 	init()
 
-	obj_data, obj_ok := parse_obj_file("resources/teapot2.obj")
+	file_path := os.args[1] if len(os.args) >= 2 else "resources/teapot.obj"
+	obj_data, obj_ok := parse_obj_file(file_path)
 	if !obj_ok {
 		fmt.println("fuck")
 		return
@@ -198,9 +199,8 @@ main :: proc() {
 
 		gl.UseProgram(shader_program)
 
-		radius :f32 = 5.0
-		cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
-
+		// radius :f32 = 5.0
+		// cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
 		// model_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, -1.5, 0.0})
 		// view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0})
 		// proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
