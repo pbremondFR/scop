@@ -20,6 +20,7 @@ ObjFileData :: struct {
 	normals:	[dynamic]Vec3f,
 
 	vert_idx:	[dynamic][3]u32,
+	// TODO: Actually use these somewhere
 	tex_idx:	[dynamic][3]u32,
 	norm_idx:	[dynamic][3]u32,
 }
@@ -43,11 +44,11 @@ parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 }
 
 parse_vertex_texture :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
-	assert(len(split_str) == 3)
+	assert(len(split_str) >= 1)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
-		strconv.parse_f32(split_str[1]) or_else 0.0,
-		strconv.parse_f32(split_str[2]) or_else 0.0,
+		len(split_str) > 1 ? strconv.parse_f32(split_str[1]) or_return : 0.0,
+		len(split_str) > 2 ? strconv.parse_f32(split_str[2]) or_return : 0.0,
 	}
 	append(&obj_data.tex_coords, vertex)
 	return true
