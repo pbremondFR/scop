@@ -49,17 +49,41 @@ GL_MAJOR_VERSION : c.int : 4
 // Constant with type inference
 GL_MINOR_VERSION :: 6
 
+InputTypes :: enum {
+	MoveForward,
+	MoveBack,
+	MoveLeft,
+	MoveRight,
+
+	LookUp,
+	LookDown,
+	LookLeft,
+	LookRight,
+
+	FovWide,
+	FovNarrow
+}
+
 State :: struct {
 	window_size: [2]i32,
 	pan: f32,
 	fov: f32,
-	buf: string,
+	dt: f64,
+	// inputs: bit_set[InputTypes],
+	glfw_inputs: map[i32]bool,
+	player_cam: Mat4f,
 }
 
 state := State{
 	window_size = {1024, 1024},
 	pan = -15.0,
 	fov = math.to_radians_f32(70.0),
+	player_cam = {
+		1.0, 0.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, -1.0,
+		0.0, 0.0, 1.0, -15.0,
+		0.0, 0.0, 0.0, 1.0,
+	}
 }
 
 get_unit_matrix :: proc() -> Mat4f {
@@ -163,6 +187,9 @@ main :: proc() {
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
+
+	old_time, time: f64 = glfw.GetTime(), glfw.GetTime()
+
 	// There is only one kind of loop in Odin called for
 	// https://odin-lang.org/docs/overview/#for-statement
 	for (!glfw.WindowShouldClose(window)) {
@@ -170,15 +197,27 @@ main :: proc() {
 		// https://www.glfw.org/docs/3.3/group__window.html#ga37bd57223967b4211d60ca1a0bf3c832
 		glfw.PollEvents()
 
+		// Calculate delta-time since last frame
+		time = glfw.GetTime()
+		state.dt = time - old_time
+		old_time = time
+
+		process_player_movements()
+
+		fmt.println(state.player_cam)
+
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
 
 		gl.UseProgram(shader_program)
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
 		model_matrix := get_rotation_matrix4_y_axis(cast(f32)glfw.GetTime())
+		model_matrix = UNIT_MAT4F
 		view_matrix := UNIT_MAT4F
 		view_matrix[3][1] = -1.0
 		view_matrix[3][2] = state.pan
+		view_matrix = state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
 		model_loc := gl.GetUniformLocation(shader_program, "model")
@@ -198,9 +237,62 @@ main :: proc() {
 
 }
 
+process_player_movements :: proc() {
+	movement: Vec3f = {0, 0, 0}
+	look: Vec2f = {0, 0}
+
+	if state.glfw_inputs[glfw.KEY_W] do movement.z += 1
+	if state.glfw_inputs[glfw.KEY_S] do movement.z -= 1
+	if state.glfw_inputs[glfw.KEY_D] do movement.x -= 1
+	if state.glfw_inputs[glfw.KEY_A] do movement.x += 1
+
+	if state.glfw_inputs[glfw.KEY_UP] do	look.y -= 1
+	if state.glfw_inputs[glfw.KEY_DOWN] do	look.y += 1
+	if state.glfw_inputs[glfw.KEY_LEFT] do	look.x -= 1
+	if state.glfw_inputs[glfw.KEY_RIGHT] do	look.x += 1
+
+	if linalg.length(movement) != 0 do movement /= linalg.length(movement)
+
+	if length := linalg.length(movement); length != 0 {
+		movement /= length
+		// movement *= f32(state.dt)
+	}
+	if length := linalg.length(look); length != 0 {
+		look /= length
+		look *= f32(state.dt)
+	}
+
+
+	movement_mat := UNIT_MAT4F
+
+	// XXX: CAREFUL WITH THE WAY YOU INDEX MATRICES IN ODIN!
+	// These two was are equivalent!!!
+	// First one is in column-major order, second in row-major
+	// I guess because first one is on the programming side while second one is similar to math notation...
+	// movement_mat[3][0] = movement.x
+	// movement_mat[3][1] = movement.y
+	// movement_mat[3][2] = movement.z
+	movement_mat[0, 3] = movement.x
+	movement_mat[1, 3] = movement.y
+	movement_mat[2, 3] = movement.z
+
+	look_mat := get_rotation_matrix4_x_axis(look.y) * get_rotation_matrix4_y_axis(look.x)
+
+	state.player_cam = look_mat * movement_mat * state.player_cam
+}
+
 
 key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
 	context = runtime.default_context()
+
+	// else if (key == glfw.KEY_UP || key == glfw.KEY_DOWN) {
+	// 	delta := 1 if key == glfw.KEY_UP else -1
+	// 	state.pan += f32(delta)
+	// }
+	// else if (key == glfw.KEY_LEFT || key == glfw.KEY_RIGHT) {
+	// 	delta :f32 = 3.0 if key == glfw.KEY_LEFT else -3.0
+	// 	state.fov += math.to_radians_f32(delta)
+	// }
 
 	// Exit program on escape pressed
 	if key == glfw.KEY_ESCAPE {
@@ -215,17 +307,16 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		// You can also use C-style ternaries! YAAAAY
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
 	}
-	else if (key == glfw.KEY_UP || key == glfw.KEY_DOWN) {
-		delta := 1 if key == glfw.KEY_UP else -1
-		state.pan += f32(delta)
-	}
-	else if (key == glfw.KEY_LEFT || key == glfw.KEY_RIGHT) {
-		delta :f32 = 3.0 if key == glfw.KEY_LEFT else -3.0
-		state.fov += math.to_radians_f32(delta)
-	}
 	else if (key >= glfw.KEY_A && key <= glfw.KEY_Z || key == glfw.KEY_SPACE) && action == glfw.PRESS {
 		key_char := u8(key)
 		fmt.printfln("Alpha key pressed: %c", key_char)
+	}
+
+	if action == glfw.PRESS {
+		state.glfw_inputs[key] = true
+	}
+	else if action == glfw.RELEASE {
+		state.glfw_inputs[key] = false
 	}
 }
 
