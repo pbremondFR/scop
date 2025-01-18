@@ -96,7 +96,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 		// Skip rest of work if length is 0
 		(len(to_parse) > 0) or_continue
 
-		split_line := strings.split(to_parse, " ", context.temp_allocator)
+		split_line := strings.fields(to_parse, context.temp_allocator)
 		defer free_all(context.temp_allocator)
 
 		switch split_line[0] {

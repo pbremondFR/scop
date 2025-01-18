@@ -145,30 +145,22 @@ main :: proc() {
 
 	init()
 
-	obj_data, map_ok := parse_obj_file("resources/teapot.obj")
-	if !map_ok {
+	obj_data, obj_ok := parse_obj_file("resources/teapot2.obj")
+	if !obj_ok {
 		fmt.println("fuck")
 		return
 	}
 	defer delete_ObjFileData(obj_data)
 
-	fmt.println("======= VERTICES =======", obj_data.vertices)
-	fmt.println("======= TEXT COORDS =======", obj_data.tex_coords)
-	fmt.println("======= NORMALS =======", obj_data.normals)
-	fmt.println("======= FACES =======", obj_data.faces)
-
-	// vertices :[]Vec3f = obj_data.vertices[:]
+	// fmt.println("======= VERTICES =======", obj_data.vertices)
+	// fmt.println("======= TEXT COORDS =======", obj_data.tex_coords)
+	// fmt.println("======= NORMALS =======", obj_data.normals)
+	// fmt.println("======= FACES =======", obj_data.faces)
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
 	defer gl.DeleteProgram(shader_program)
-
-	// vertices := [?]f32{
-	// 	-0.5, -0.5, 0.0,
-	// 	 0.5, -0.5, 0.0,
-	// 	 0.0,  0.5, 0.0
-	// };
 
 	// Setup buffers and everything idk what I'm doing
 	vao, vbo, ebo: u32
@@ -193,6 +185,7 @@ main :: proc() {
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
 
+	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
 	// There is only one kind of loop in Odin called for
 	// https://odin-lang.org/docs/overview/#for-statement
@@ -201,18 +194,20 @@ main :: proc() {
 		// https://www.glfw.org/docs/3.3/group__window.html#ga37bd57223967b4211d60ca1a0bf3c832
 		glfw.PollEvents()
 
-		gl.Clear(gl.COLOR_BUFFER_BIT)
+		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		gl.UseProgram(shader_program)
 
-		radius :f32 = 10.0
+		radius :f32 = 5.0
 		cam_pos := Vec3f{math.sin(cast(f32)glfw.GetTime()) * radius, 0.0, math.cos(cast(f32)glfw.GetTime()) * radius}
-		view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, false)
 
-		model_matrix := linalg.MATRIX4F32_IDENTITY
-		// model_matrix := linalg.matrix4_rotate_f32(math.to_radians_f32(-55.0), Vec3f{1.0, 0.0, 0.0})
-		// view_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, 0.0, 3.0})
-		proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100, false)
+		// model_matrix := linalg.matrix4_translate_f32(Vec3f{0.0, -1.5, 0.0})
+		// view_matrix := linalg.matrix4_look_at_f32(cam_pos, {0.0, 0.0, 0.0}, {0.0, 1.0, 0.0})
+		// proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
+
+		model_matrix := linalg.matrix4_rotate_f32(cast(f32)glfw.GetTime(), {0.0, 1.0, 0.0})
+		view_matrix := linalg.matrix4_translate_f32({0.0, -1.5, -5.0})
+		proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
 
 		model_loc := gl.GetUniformLocation(shader_program, "model")
 		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
