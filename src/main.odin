@@ -153,6 +153,11 @@ main :: proc() {
 	}
 	defer delete_ObjFileData(obj_data)
 
+	// After buffer creation:
+	fmt.printf("Vertex count: %d\n", len(obj_data.vertices))
+	fmt.printf("Face count: %d\n", len(obj_data.faces))
+	fmt.printf("First few faces: %v\n", obj_data.faces[0:min(5, len(obj_data.faces))])
+
 	// fmt.println("======= VERTICES =======", obj_data.vertices)
 	// fmt.println("======= TEXT COORDS =======", obj_data.tex_coords)
 	// fmt.println("======= NORMALS =======", obj_data.normals)
@@ -180,8 +185,8 @@ main :: proc() {
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.faces) * size_of(obj_data.faces[0]), &obj_data.faces[0], gl.STATIC_DRAW)
 
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(obj_data.vertices[0]), 0)
 	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(Vec3f), 0)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
@@ -206,7 +211,7 @@ main :: proc() {
 		// proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
 
 		model_matrix := linalg.matrix4_rotate_f32(cast(f32)glfw.GetTime(), {0.0, 1.0, 0.0})
-		view_matrix := linalg.matrix4_translate_f32({0.0, -1.5, -5.0})
+		view_matrix := linalg.matrix4_translate_f32({0.0, -1., -15.0})
 		proj_matrix := linalg.matrix4_perspective_f32(math.to_radians_f32(70.0), 1, 0.1, 100)
 
 		model_loc := gl.GetUniformLocation(shader_program, "model")
@@ -222,7 +227,7 @@ main :: proc() {
 		// gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(vertices))
 
 		// gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.faces), gl.UNSIGNED_SHORT, nil)
+		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.faces) * 3, gl.UNSIGNED_SHORT, nil)
 
 		// This function swaps the front and back buffers of the specified window.
 		// See https://en.wikipedia.org/wiki/Multiple_buffering to learn more about Multiple buffering

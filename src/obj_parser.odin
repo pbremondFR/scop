@@ -64,9 +64,9 @@ parse_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		vertex := [3]u16{
-			cast(u16)strconv.parse_u64(split_str[0]) or_return,
-			cast(u16)strconv.parse_u64(split_str[i]) or_return,
-			cast(u16)strconv.parse_u64(split_str[i + 1]) or_return,
+			cast(u16)strconv.parse_u64(split_str[0]) or_return - 1,
+			cast(u16)strconv.parse_u64(split_str[i]) or_return - 1,
+			cast(u16)strconv.parse_u64(split_str[i + 1]) or_return - 1,
 		}
 		append(&obj_data.faces, vertex)
 	}
