@@ -167,10 +167,6 @@ main :: proc() {
 	}
 	defer delete_ObjFileData(obj_data)
 
-	texture, texture_ok := parse_bmp_texture("resources/test.bmp")
-	assert(texture_ok)
-	defer delete_BitmapTexture(texture)
-
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
@@ -199,6 +195,14 @@ main :: proc() {
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
 
+	// === TEXTURES ===
+	texture, texture_ok := get_gl_texture("resources/test.bmp")
+	if !texture_ok {
+		fmt.println("Failed to load texture")
+		return
+	}
+	defer gl.DeleteTextures(1, &texture.id)
+
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
 
@@ -222,7 +226,8 @@ main :: proc() {
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-
+		// TODO: Textures
+		// gl.BindTexture(gl.TEXTURE_2D, texture_id)
 		gl.UseProgram(shader_program)
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
@@ -318,10 +323,6 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE if wireframe else gl.FILL)
 		// You can also use C-style ternaries! YAAAAY
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
-	}
-	else if (key >= glfw.KEY_A && key <= glfw.KEY_Z || key == glfw.KEY_SPACE) && action == glfw.PRESS {
-		key_char := u8(key)
-		fmt.printfln("Alpha key pressed: %c", key_char)
 	}
 
 	if action == glfw.PRESS {
