@@ -30,6 +30,8 @@ delete_ObjFileData :: proc(data: ObjFileData) {
 	delete(data.tex_coords)
 	delete(data.normals)
 	delete(data.vert_idx)
+	delete(data.tex_idx)
+	delete(data.norm_idx)
 }
 
 parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
