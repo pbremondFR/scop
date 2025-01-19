@@ -143,6 +143,10 @@ main :: proc() {
 	}
 	defer delete_ObjFileData(obj_data)
 
+	texture, texture_ok := parse_bmp_texture("resources/test.bmp")
+	assert(texture_ok)
+	defer delete_BitmapTexture(texture)
+
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
