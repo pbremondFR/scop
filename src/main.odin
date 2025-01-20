@@ -186,19 +186,10 @@ main :: proc() {
 
 	gl.BindVertexArray(vao)
 
-	// fmt.printfln("size_of: %v, len * size_of: %v", size_of(obj_data.vertices), len(obj_data.vertices) * size_of(obj_data.vertices[0]))
-	// assert(size_of(obj_data.vertices) == len(obj_data.vertices) * size_of(obj_data.vertices[0]))
-	vertex_buffer := obj_data_to_vertex_buffer(obj_data)
+	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(obj_data)
 	// TODO: Free obj_data when no longer needed, for now use defer
 	defer delete(vertex_buffer)
-
-	fmt.printfln("Vertex 0: %v", vertex_buffer[0])
-	fmt.printfln("Vertex n: %v", vertex_buffer[len(vertex_buffer) - 1])
-	for v in vertex_buffer {
-		fmt.printfln("### %v", v)
-	}
-	// fmt.printfln("Vertex buffer:\n%v", vertex_buffer)
-
+	defer delete(index_buffer)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	// gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]),
@@ -216,14 +207,14 @@ main :: proc() {
 	gl.EnableVertexAttribArray(2)
 
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.face_vertex_idx) * size_of(obj_data.face_vertex_idx[0]),
-		raw_data(obj_data.face_vertex_idx), gl.STATIC_DRAW)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
+		raw_data(index_buffer), gl.STATIC_DRAW)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
 
 	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/Coob.bmp")
+	texture, texture_ok := get_gl_texture("resources/Rafale-airframe_baseColor.bmp")
 	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
@@ -302,15 +293,11 @@ get_model_offset_vector :: proc(model: ObjFileData) -> Vec3f {
 		if v.x > max.x || v.y > max.y || v.z > max.z do max = v
 	}
 	translation_vector := (max - min)
-	fmt.println(translation_vector)
+	fmt.println("Offset vector:", translation_vector)
 	translation_vector /= 2
-	fmt.println(translation_vector)
+	fmt.println("Offset vector:", translation_vector)
 	return translation_vector + min
 }
-
-// get_model_matrix :: proc(rotation: f32) -> Mat4f {
-
-// }
 
 process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}

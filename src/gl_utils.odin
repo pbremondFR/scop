@@ -84,32 +84,46 @@ VertexData :: struct #packed {
 	norm: Vec3f "norm",
 }
 
-obj_data_to_vertex_buffer :: proc(obj_data: ObjFileData) -> []VertexData {
-	// array_length := math.max( len(obj_data.vertices), len(obj_data.normals), len(obj_data.tex_coords) )
-	// assert(len(obj_data.face_vertex_idx) == len(obj_data.face_texture_idx))
-	// assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
+// FIXME: This is complete shit
+obj_data_to_vertex_buffer :: proc(obj_data: ObjFileData) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 
-	buffer_max_len := math.max( len(obj_data.vertices), len(obj_data.tex_coords), len(obj_data.normals) )
+	// XXX: This is too strict of a requirement but it will do for now,
+	// I need to fix model loading before fixing this quirk in .obj parsing
+	assert(len(obj_data.face_vertex_idx) == len(obj_data.face_texture_idx))
+	assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
 
-	vertex_buffer := make([dynamic]VertexData, buffer_max_len)
+	vertex_buffer := make([dynamic]VertexData)
+	index_buffer := make([dynamic]u32)
 
-	max_idx: u32 = 0
-	for idx in obj_data.face_vertex_idx {
-		if idx > max_idx do max_idx = idx
-		vertex_buffer[idx].pos = obj_data.vertices[idx]
+	ObjFileVertexIdentifier :: struct {
+		pos_idx: u32, uv_idx: u32, norm_idx: u32
+	}
+	vertex_locations := make(map[ObjFileVertexIdentifier]u32)
+	defer delete(vertex_locations)
+
+	for i in 0..<len(obj_data.face_vertex_idx) {
+		pos_idx := obj_data.face_vertex_idx[i]
+		uv_idx := obj_data.face_texture_idx[i]
+		norm_idx := obj_data.face_normal_idx[i]
+
+		vertex_identity := ObjFileVertexIdentifier{pos_idx, uv_idx, norm_idx}
+
+		if !(vertex_identity in vertex_locations) {
+			vertex_index := u32(len(vertex_buffer))
+			vertex_locations[vertex_identity] = vertex_index
+			vertex := VertexData{
+				pos = obj_data.vertices[pos_idx],
+				uv = obj_data.tex_coords[uv_idx],
+				norm = obj_data.normals[norm_idx],
+			}
+			append(&index_buffer, vertex_index)
+			append(&vertex_buffer, vertex)
+		}
+		else {
+			vertex_index := vertex_locations[vertex_identity]
+			append(&index_buffer, vertex_index)
+		}
 	}
 
-	for idx in obj_data.face_texture_idx {
-		if idx > max_idx do max_idx = idx
-		vertex_buffer[idx].uv = obj_data.tex_coords[idx]
-	}
-
-	for idx in obj_data.face_normal_idx {
-		if idx > max_idx do max_idx = idx
-		vertex_buffer[idx].norm = obj_data.normals[idx]
-	}
-
-	resize(&vertex_buffer, max_idx + 1)
-
-	return vertex_buffer[:]
+	return vertex_buffer[:], index_buffer[:]
 }
