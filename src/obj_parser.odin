@@ -16,22 +16,22 @@ Vec4d :: [4]f64
 
 ObjFileData :: struct {
 	vertices:	[dynamic]Vec3f,
-	tex_coords:	[dynamic]Vec3f,
+	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
 	normals:	[dynamic]Vec3f,
 
-	vert_idx:	[dynamic][3]u32,
+	face_vertex_idx:	[dynamic]u32,
 	// TODO: Actually use these somewhere
-	tex_idx:	[dynamic][3]u32,
-	norm_idx:	[dynamic][3]u32,
+	face_texture_idx:	[dynamic]u32,
+	face_normal_idx:	[dynamic]u32,
 }
 
 delete_ObjFileData :: proc(data: ObjFileData) {
 	delete(data.vertices)
 	delete(data.tex_coords)
 	delete(data.normals)
-	delete(data.vert_idx)
-	delete(data.tex_idx)
-	delete(data.norm_idx)
+	delete(data.face_vertex_idx)
+	delete(data.face_texture_idx)
+	delete(data.face_normal_idx)
 }
 
 parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
@@ -80,7 +80,9 @@ parse_easy_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 			cast(u32)strconv.parse_u64(split_str[i]) or_return - 1,
 			cast(u32)strconv.parse_u64(split_str[i + 1]) or_return - 1,
 		}
-		append(&obj_data.vert_idx, vertex_indices)
+		append(&obj_data.face_vertex_idx, vertex_indices[0], vertex_indices[1], vertex_indices[2])
+		// append(&obj_data.face_texture_idx, [3]u32{0, 0, 0})
+		// append(&obj_data.face_normal_idx, [3]u32{0, 0, 0})
 	}
 	return true
 }
@@ -103,18 +105,21 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 			cast(u32)strconv.parse_u64(indexes_z[0]) or_return -1,
 		}
 		uv_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[1]) or_else 0),
-			u32(strconv.parse_u64(indexes_y[1]) or_else 0),
-			u32(strconv.parse_u64(indexes_z[1]) or_else 0),
+			u32(strconv.parse_u64(indexes_x[1]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_y[1]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_z[1]) or_else 1) - 1,
 		}
 		normals_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[2]) or_else 0),
-			u32(strconv.parse_u64(indexes_y[2]) or_else 0),
-			u32(strconv.parse_u64(indexes_z[2]) or_else 0),
+			u32(strconv.parse_u64(indexes_x[2]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_y[2]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_z[2]) or_else 1) - 1,
 		}
-		append(&obj_data.vert_idx, vertex_indices)
-		append(&obj_data.tex_idx, uv_indices)
-		append(&obj_data.norm_idx, normals_indices)
+		append(&obj_data.face_vertex_idx, vertex_indices[0], vertex_indices[1], vertex_indices[2])
+		append(&obj_data.face_texture_idx, uv_indices[0], uv_indices[1], uv_indices[2])
+		append(&obj_data.face_normal_idx, normals_indices[0], normals_indices[1], normals_indices[2])
+		// append(&obj_data.face_vertex_idx, vertex_indices)
+		// append(&obj_data.face_texture_idx, uv_indices)
+		// append(&obj_data.face_normal_idx, normals_indices)
 	}
 	return true
 
@@ -161,6 +166,17 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 			fmt.println("Unrecognized line:", to_parse)
 		}
 	}
+
+	// assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
+	// fmt.println(len(obj_data.vertices), len(obj_data.tex_coords))
+	// assert(len(obj_data.vertices) == len(obj_data.tex_coords))
+	// assert(len(obj_data.normals) == len(obj_data.tex_coords))
+
+	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals",
+		obj_file_path, len(obj_data.vertices), len(obj_data.tex_coords), len(obj_data.normals))
+	fmt.printfln("=== Vertex indices: %v\n=== UV indices: %v\n=== Normal indices: %v",
+		len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx))
+
 	ok = true
 	return
 }

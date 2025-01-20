@@ -167,6 +167,8 @@ main :: proc() {
 	}
 	defer delete_ObjFileData(obj_data)
 
+	model_offset := get_model_offset_vector(obj_data)
+
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
 	assert(shader_ok, "Failed to load shaders")
@@ -183,14 +185,30 @@ main :: proc() {
 
 	gl.BindVertexArray(vao)
 
+	// fmt.printfln("size_of: %v, len * size_of: %v", size_of(obj_data.vertices), len(obj_data.vertices) * size_of(obj_data.vertices[0]))
+	// assert(size_of(obj_data.vertices) == len(obj_data.vertices) * size_of(obj_data.vertices[0]))
+	vertex_buffer := obj_data_to_vertex_buffer(obj_data)
+	// TODO: Free obj_data when no longer needed, for now use defer
+	defer delete(vertex_buffer)
+
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]), &obj_data.vertices[0], gl.STATIC_DRAW)
+	// gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]),
+	// 	&obj_data.vertices[0], gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
+		raw_data(vertex_buffer), gl.STATIC_DRAW)
+
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
+	gl.EnableVertexAttribArray(0)
+
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
+	gl.EnableVertexAttribArray(1)
+
+	gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
+	gl.EnableVertexAttribArray(2)
 
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.vert_idx) * size_of(obj_data.vert_idx[0]), &obj_data.vert_idx[0], gl.STATIC_DRAW)
-
-	gl.EnableVertexAttribArray(0)
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(Vec3f), 0)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(obj_data.face_vertex_idx) * size_of(obj_data.face_vertex_idx[0]),
+		raw_data(obj_data.face_vertex_idx), gl.STATIC_DRAW)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
@@ -232,7 +250,12 @@ main :: proc() {
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
 		model_matrix := get_rotation_matrix4_y_axis(cast(f32)glfw.GetTime())
-		model_matrix = UNIT_MAT4F
+
+		// model_matrix[3][0] = model_offset.x
+		// model_matrix[3][1] = model_offset.y
+		// model_matrix[3][2] = model_offset.z
+		// model_matrix = UNIT_MAT4F
+
 		view_matrix := state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
@@ -246,12 +269,30 @@ main :: proc() {
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
-		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.vert_idx) * 3, gl.UNSIGNED_INT, nil)
+		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.face_vertex_idx) * 3, gl.UNSIGNED_INT, nil)
 
 		glfw.SwapBuffers(window)
 	}
 
 }
+
+get_model_offset_vector :: proc(model: ObjFileData) -> Vec3f {
+	min, max: Vec3f
+	for v in model.vertices {
+		// fmt.println("###", min, max, v)
+		if v.x < min.x || v.y < min.y || v.z < min.z do min = v
+		if v.x > max.x || v.y > max.y || v.z > max.z do max = v
+	}
+	translation_vector := (max - min)
+	fmt.println(translation_vector)
+	translation_vector /= 2
+	fmt.println(translation_vector)
+	return translation_vector + min
+}
+
+// get_model_matrix :: proc(rotation: f32) -> Mat4f {
+
+// }
 
 process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}

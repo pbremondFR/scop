@@ -1,5 +1,8 @@
 #version 330 core
+
 in vec4 vertex_pos;
+in vec3 Normal;
+
 out vec4 FragColor;
 
 void main()
@@ -8,6 +11,6 @@ void main()
 	FragColor = vec4(vertex_pos.xyz, 1.0f);
 
 	// Thanks claude for that debugging snippet, very cool
-	vec3 normal = normalize(cross(dFdx(vertex_pos.xyz), dFdy(vertex_pos.xyz)));
-    FragColor = vec4((normal + 1.0) * 0.5, 1.0);
+	// vec3 normal = normalize(cross(dFdx(vertex_pos.xyz), dFdy(vertex_pos.xyz)));
+    FragColor = vec4((Normal + 1.0) * 0.5, 1.0);
 }

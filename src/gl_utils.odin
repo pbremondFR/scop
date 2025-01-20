@@ -2,6 +2,7 @@ package main
 
 import "core:os"
 import "core:fmt"
+import "core:math"
 import gl "vendor:OpenGL"
 
 compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (shader_id: u32, ok: bool) {
@@ -75,4 +76,32 @@ get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 
 	ok = true
 	return
+}
+
+VertexData :: struct #packed {
+	pos: Vec3f,
+	uv: Vec3f,
+	norm: Vec3f,
+}
+
+obj_data_to_vertex_buffer :: proc(obj_data: ObjFileData) -> []VertexData {
+	// array_length := math.max( len(obj_data.vertices), len(obj_data.normals), len(obj_data.tex_coords) )
+	// assert(len(obj_data.face_vertex_idx) == len(obj_data.face_texture_idx))
+	// assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
+	buffer_len := math.max( len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx) )
+	vertex_buffer := make([]VertexData, buffer_len)
+
+	for idx in obj_data.face_vertex_idx {
+		vertex_buffer[idx].pos = obj_data.vertices[idx]
+	}
+
+	for idx in obj_data.face_texture_idx {
+		vertex_buffer[idx].uv = obj_data.tex_coords[idx]
+	}
+
+	for idx in obj_data.face_normal_idx {
+		vertex_buffer[idx].norm = obj_data.normals[idx]
+	}
+
+	return vertex_buffer
 }
