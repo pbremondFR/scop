@@ -67,7 +67,7 @@ get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
 	// Copied texture to GPU buffer, we can now free memory here
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, texture.width, texture.height, 0, gl.RGB,
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, texture.width, texture.height, 0, gl.BGR,
 		gl.UNSIGNED_BYTE, raw_data(bmp.data))
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
@@ -79,29 +79,37 @@ get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 }
 
 VertexData :: struct #packed {
-	pos: Vec3f,
-	uv: Vec3f,
-	norm: Vec3f,
+	pos: Vec3f "pos",
+	uv: Vec3f "uv",
+	norm: Vec3f "norm",
 }
 
 obj_data_to_vertex_buffer :: proc(obj_data: ObjFileData) -> []VertexData {
 	// array_length := math.max( len(obj_data.vertices), len(obj_data.normals), len(obj_data.tex_coords) )
 	// assert(len(obj_data.face_vertex_idx) == len(obj_data.face_texture_idx))
 	// assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
-	buffer_len := math.max( len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx) )
-	vertex_buffer := make([]VertexData, buffer_len)
 
+	buffer_max_len := math.max( len(obj_data.vertices), len(obj_data.tex_coords), len(obj_data.normals) )
+
+	vertex_buffer := make([dynamic]VertexData, buffer_max_len)
+
+	max_idx: u32 = 0
 	for idx in obj_data.face_vertex_idx {
+		if idx > max_idx do max_idx = idx
 		vertex_buffer[idx].pos = obj_data.vertices[idx]
 	}
 
 	for idx in obj_data.face_texture_idx {
+		if idx > max_idx do max_idx = idx
 		vertex_buffer[idx].uv = obj_data.tex_coords[idx]
 	}
 
 	for idx in obj_data.face_normal_idx {
+		if idx > max_idx do max_idx = idx
 		vertex_buffer[idx].norm = obj_data.normals[idx]
 	}
 
-	return vertex_buffer
+	resize(&vertex_buffer, max_idx + 1)
+
+	return vertex_buffer[:]
 }

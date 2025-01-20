@@ -8,6 +8,7 @@ uniform mat4 view;
 uniform mat4 projection;
 
 out vec4 vertex_pos;
+out vec2 Uv;
 out vec3 Normal;
 
 void main()
@@ -15,4 +16,5 @@ void main()
 	gl_Position = projection * view * model * vec4(aPos, 1.0);
 	vertex_pos = vec4(aPos, 1.0);
 	Normal = aNormal;
+	Uv = aUv.xy;
 }

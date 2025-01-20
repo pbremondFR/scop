@@ -20,7 +20,6 @@ ObjFileData :: struct {
 	normals:	[dynamic]Vec3f,
 
 	face_vertex_idx:	[dynamic]u32,
-	// TODO: Actually use these somewhere
 	face_texture_idx:	[dynamic]u32,
 	face_normal_idx:	[dynamic]u32,
 }
@@ -96,19 +95,20 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 		indexes_x := strings.split(split_str[0], "/", context.temp_allocator)
 		indexes_y := strings.split(split_str[i], "/", context.temp_allocator)
 		indexes_z := strings.split(split_str[i + 1], "/", context.temp_allocator)
-		// defer free_all(context.temp_allocator)
 
 		// "or_return -1" -> weird syntax. Means parsed u64 -1, or_return on error.
 		vertex_indices := [3]u32{
-			cast(u32)strconv.parse_u64(indexes_x[0]) or_return -1,
-			cast(u32)strconv.parse_u64(indexes_y[0]) or_return -1,
-			cast(u32)strconv.parse_u64(indexes_z[0]) or_return -1,
+			(cast(u32)strconv.parse_u64(indexes_x[0]) or_return) -1,
+			(cast(u32)strconv.parse_u64(indexes_y[0]) or_return) -1,
+			(cast(u32)strconv.parse_u64(indexes_z[0]) or_return) -1,
 		}
+		// FIXME: Also buffer overflow but like not here
 		uv_indices := [3]u32{
 			u32(strconv.parse_u64(indexes_x[1]) or_else 1) - 1,
 			u32(strconv.parse_u64(indexes_y[1]) or_else 1) - 1,
 			u32(strconv.parse_u64(indexes_z[1]) or_else 1) - 1,
 		}
+		// FIXME: Buffer overflow when normals are not specified
 		normals_indices := [3]u32{
 			u32(strconv.parse_u64(indexes_x[2]) or_else 1) - 1,
 			u32(strconv.parse_u64(indexes_y[2]) or_else 1) - 1,
@@ -176,6 +176,18 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 		obj_file_path, len(obj_data.vertices), len(obj_data.tex_coords), len(obj_data.normals))
 	fmt.printfln("=== Vertex indices: %v\n=== UV indices: %v\n=== Normal indices: %v",
 		len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx))
+
+	max: [2]f32
+	for i in 0..<len(obj_data.tex_coords) {
+	// for vt in obj_data.tex_coords {
+		vt := obj_data.tex_coords[i]
+		error_message := fmt.aprintfln("Error at vt %v", i)
+		// assert(vt.x >= 0 && vt.x <= 1 && vt.y >= 0 && vt.y <= 1, error_message)
+		if vt.x > max.x do max.x = vt.x
+		if vt.y > max.y do max.y = vt.y
+		delete(error_message)
+	}
+	fmt.printfln("Max VT: %v", max)
 
 	ok = true
 	return

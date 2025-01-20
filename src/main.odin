@@ -59,6 +59,7 @@ State :: struct {
 	dt: f64,
 	glfw_inputs: map[i32]bool,
 	player_cam: Mat4f,
+	enable_model_spin: bool,
 }
 
 state := State{
@@ -191,6 +192,14 @@ main :: proc() {
 	// TODO: Free obj_data when no longer needed, for now use defer
 	defer delete(vertex_buffer)
 
+	fmt.printfln("Vertex 0: %v", vertex_buffer[0])
+	fmt.printfln("Vertex n: %v", vertex_buffer[len(vertex_buffer) - 1])
+	for v in vertex_buffer {
+		fmt.printfln("### %v", v)
+	}
+	// fmt.printfln("Vertex buffer:\n%v", vertex_buffer)
+
+
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	// gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]),
 	// 	&obj_data.vertices[0], gl.STATIC_DRAW)
@@ -214,12 +223,16 @@ main :: proc() {
 	gl.BindVertexArray(0)
 
 	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/test.bmp")
+	texture, texture_ok := get_gl_texture("resources/Coob.bmp")
+	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
 		return
 	}
 	defer gl.DeleteTextures(1, &texture.id)
+
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.BACK)
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
@@ -245,11 +258,16 @@ main :: proc() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		// TODO: Textures
-		// gl.BindTexture(gl.TEXTURE_2D, texture_id)
+		gl.BindTexture(gl.TEXTURE_2D, texture.id)
 		gl.UseProgram(shader_program)
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)glfw.GetTime())
+
+		@(static) time: f64 = 0
+		if state.enable_model_spin {
+			time += state.dt
+		}
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time) //* get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
 
 		// model_matrix[3][0] = model_offset.x
 		// model_matrix[3][1] = model_offset.y
@@ -364,6 +382,14 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE if wireframe else gl.FILL)
 		// You can also use C-style ternaries! YAAAAY
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
+		if wireframe {
+			gl.Disable(gl.CULL_FACE)
+		} else {
+			gl.Enable(gl.CULL_FACE)
+		}
+	}
+	else if key == glfw.KEY_BACKSLASH && action == glfw.PRESS {
+		state.enable_model_spin = !state.enable_model_spin
 	}
 
 	if action == glfw.PRESS {
