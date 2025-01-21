@@ -5,6 +5,7 @@ import "core:mem/virtual"
 import "core:strings"
 import "core:fmt"
 import "core:strconv"
+import clang "core:c"
 
 Vec2f :: [2]f32
 Vec3f :: [3]f32
@@ -14,23 +15,25 @@ Vec2d :: [2]f64
 Vec3d :: [3]f64
 Vec4d :: [4]f64
 
+ObjFileVertexIndices :: struct {
+	pos_idx: u32,
+	uv_idx: u32,
+	norm_idx: u32,
+}
+
 ObjFileData :: struct {
-	vertices:	[dynamic]Vec3f,
+	vert_positions:	[dynamic]Vec3f,
 	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
 	normals:	[dynamic]Vec3f,
 
-	face_vertex_idx:	[dynamic]u32,
-	face_texture_idx:	[dynamic]u32,
-	face_normal_idx:	[dynamic]u32,
+	vertex_indices:	[dynamic]ObjFileVertexIndices,
 }
 
 delete_ObjFileData :: proc(data: ObjFileData) {
-	delete(data.vertices)
+	delete(data.vert_positions)
 	delete(data.tex_coords)
 	delete(data.normals)
-	delete(data.face_vertex_idx)
-	delete(data.face_texture_idx)
-	delete(data.face_normal_idx)
+	delete(data.vertex_indices)
 }
 
 parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
@@ -40,7 +43,7 @@ parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 		strconv.parse_f32(split_str[1]) or_return,
 		strconv.parse_f32(split_str[2]) or_return,
 	}
-	append(&obj_data.vertices, vertex)
+	append(&obj_data.vert_positions, vertex)
 	return true
 }
 
@@ -74,14 +77,18 @@ parse_easy_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
 		// Get the vertex indices that make up this face.
-		vertex_indices := [3]u32{
+		pos_indices := [3]u32{
 			cast(u32)strconv.parse_u64(split_str[0]) or_return - 1,
 			cast(u32)strconv.parse_u64(split_str[i]) or_return - 1,
 			cast(u32)strconv.parse_u64(split_str[i + 1]) or_return - 1,
 		}
-		append(&obj_data.face_vertex_idx, vertex_indices[0], vertex_indices[1], vertex_indices[2])
-		// append(&obj_data.face_texture_idx, [3]u32{0, 0, 0})
-		// append(&obj_data.face_normal_idx, [3]u32{0, 0, 0})
+		to_append := [3]ObjFileVertexIndices{
+			{pos_idx = pos_indices[0], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX},
+			{pos_idx = pos_indices[1], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX},
+			{pos_idx = pos_indices[2], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX}
+		}
+		append(&obj_data.vertex_indices, ..to_append[:])
+
 	}
 	return true
 }
@@ -97,29 +104,36 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 		indexes_z := strings.split(split_str[i + 1], "/", context.temp_allocator)
 
 		// "or_return -1" -> weird syntax. Means parsed u64 -1, or_return on error.
-		vertex_indices := [3]u32{
+		pos_indices := [3]u32{
 			(cast(u32)strconv.parse_u64(indexes_x[0]) or_return) -1,
 			(cast(u32)strconv.parse_u64(indexes_y[0]) or_return) -1,
 			(cast(u32)strconv.parse_u64(indexes_z[0]) or_return) -1,
 		}
 		// FIXME: Also buffer overflow but like not here
+		// XXX: If UV or normal indices aren't specified, they're set to UINT32_MAX.
+		// This is because integer underflow is well-defined in Odin (0 - 1 will go to UINT32_MAX)
+		// The parsing pipeline further down should recognize this and handle it.
 		uv_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[1]) or_else 1) - 1,
-			u32(strconv.parse_u64(indexes_y[1]) or_else 1) - 1,
-			u32(strconv.parse_u64(indexes_z[1]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_x[1]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_y[1]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_z[1]) or_else 0) - 1,
 		}
 		// FIXME: Buffer overflow when normals are not specified
 		normals_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[2]) or_else 1) - 1,
-			u32(strconv.parse_u64(indexes_y[2]) or_else 1) - 1,
-			u32(strconv.parse_u64(indexes_z[2]) or_else 1) - 1,
+			u32(strconv.parse_u64(indexes_x[2]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_y[2]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_z[2]) or_else 0) - 1,
 		}
-		append(&obj_data.face_vertex_idx, vertex_indices[0], vertex_indices[1], vertex_indices[2])
-		append(&obj_data.face_texture_idx, uv_indices[0], uv_indices[1], uv_indices[2])
-		append(&obj_data.face_normal_idx, normals_indices[0], normals_indices[1], normals_indices[2])
-		// append(&obj_data.face_vertex_idx, vertex_indices)
-		// append(&obj_data.face_texture_idx, uv_indices)
-		// append(&obj_data.face_normal_idx, normals_indices)
+		to_append := [3]ObjFileVertexIndices{
+			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0]},
+			{pos_idx = pos_indices[1], uv_idx = uv_indices[1], norm_idx = normals_indices[1]},
+			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2]}
+		}
+		append(&obj_data.vertex_indices, ..to_append[:])
+
+		// append(&obj_data.face_vertex_idx, pos_indices[0], pos_indices[1], pos_indices[2])
+		// append(&obj_data.face_texture_idx, uv_indices[0], uv_indices[1], uv_indices[2])
+		// append(&obj_data.face_normal_idx, normals_indices[0], normals_indices[1], normals_indices[2])
 	}
 	return true
 
@@ -172,10 +186,10 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 	// assert(len(obj_data.vertices) == len(obj_data.tex_coords))
 	// assert(len(obj_data.normals) == len(obj_data.tex_coords))
 
-	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals",
-		obj_file_path, len(obj_data.vertices), len(obj_data.tex_coords), len(obj_data.normals))
-	fmt.printfln("=== Vertex indices: %v\n=== UV indices: %v\n=== Normal indices: %v",
-		len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx))
+	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices",
+		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices))
+	// fmt.printfln("=== Vertex indices: %v\n=== UV indices: %v\n=== Normal indices: %v",
+	// 	len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx))
 
 	max: [2]f32
 	for i in 0..<len(obj_data.tex_coords) {

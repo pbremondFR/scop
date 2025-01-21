@@ -186,16 +186,13 @@ main :: proc() {
 
 	gl.BindVertexArray(vao)
 
-	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(obj_data)
-	// TODO: Free obj_data when no longer needed, for now use defer
-	defer delete(vertex_buffer)
-	defer delete(index_buffer)
+	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	// gl.BufferData(gl.ARRAY_BUFFER, len(obj_data.vertices) * size_of(obj_data.vertices[0]),
-	// 	&obj_data.vertices[0], gl.STATIC_DRAW)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
 		raw_data(vertex_buffer), gl.STATIC_DRAW)
+	// Copied to VRAM, we can now release memory on the CPU side
+	delete(vertex_buffer)
 
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
 	gl.EnableVertexAttribArray(0)
@@ -209,6 +206,8 @@ main :: proc() {
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
 		raw_data(index_buffer), gl.STATIC_DRAW)
+	// Copied to VRAM, we can now release memory on the CPU side
+	delete(index_buffer)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
@@ -248,7 +247,6 @@ main :: proc() {
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		// TODO: Textures
 		gl.BindTexture(gl.TEXTURE_2D, texture.id)
 		gl.UseProgram(shader_program)
 
@@ -278,7 +276,7 @@ main :: proc() {
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
-		gl.DrawElements(gl.TRIANGLES, cast(i32)len(obj_data.face_vertex_idx) * 3, gl.UNSIGNED_INT, nil)
+		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
 
 		glfw.SwapBuffers(window)
 	}
@@ -287,7 +285,7 @@ main :: proc() {
 
 get_model_offset_vector :: proc(model: ObjFileData) -> Vec3f {
 	min, max: Vec3f
-	for v in model.vertices {
+	for v in model.vert_positions {
 		// fmt.println("###", min, max, v)
 		if v.x < min.x || v.y < min.y || v.z < min.z do min = v
 		if v.x > max.x || v.y > max.y || v.z > max.z do max = v

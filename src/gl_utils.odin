@@ -4,6 +4,7 @@ import "core:os"
 import "core:fmt"
 import "core:math"
 import gl "vendor:OpenGL"
+import clang "core:c"
 
 compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (shader_id: u32, ok: bool) {
 	shader_id = gl.CreateShader(shader_type)
@@ -84,40 +85,50 @@ VertexData :: struct #packed {
 	norm: Vec3f "norm",
 }
 
-// FIXME: This is complete shit
-obj_data_to_vertex_buffer :: proc(obj_data: ObjFileData) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
+@(private="file")
+insert_vertex_in_vertex_buffer :: proc(
+	obj_data: ^ObjFileData,
+	vertex_buffer: ^[dynamic]VertexData,
+	vertex_id: ObjFileVertexIndices)
+{
+	vertex_id := vertex_id
 
-	// XXX: This is too strict of a requirement but it will do for now,
-	// I need to fix model loading before fixing this quirk in .obj parsing
-	assert(len(obj_data.face_vertex_idx) == len(obj_data.face_texture_idx))
-	assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
+	if vertex_id.uv_idx == clang.UINT32_MAX {
+		new_idx := u32(len(obj_data.tex_coords))
+		append(&obj_data.tex_coords, [3]f32{0, 0, 0})
+		vertex_id.uv_idx = new_idx
+	}
+	if vertex_id.norm_idx == clang.UINT32_MAX {
+		new_idx := u32(len(obj_data.normals))
+		append(&obj_data.normals, [3]f32{0, 0, 0})
+		vertex_id.norm_idx = new_idx
+	}
+	vertex := VertexData{
+		pos = obj_data.vert_positions[vertex_id.pos_idx],
+		uv = obj_data.tex_coords[vertex_id.uv_idx],
+		norm = obj_data.normals[vertex_id.norm_idx],
+	}
+	append(vertex_buffer, vertex)
+}
 
+obj_data_to_vertex_buffer :: proc(obj_data: ^ObjFileData) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 	vertex_buffer := make([dynamic]VertexData)
 	index_buffer := make([dynamic]u32)
 
 	ObjFileVertexIdentifier :: struct {
 		pos_idx: u32, uv_idx: u32, norm_idx: u32
 	}
-	vertex_locations := make(map[ObjFileVertexIdentifier]u32)
+	vertex_locations := make(map[ObjFileVertexIndices]u32)
 	defer delete(vertex_locations)
 
-	for i in 0..<len(obj_data.face_vertex_idx) {
-		pos_idx := obj_data.face_vertex_idx[i]
-		uv_idx := obj_data.face_texture_idx[i]
-		norm_idx := obj_data.face_normal_idx[i]
-
-		vertex_identity := ObjFileVertexIdentifier{pos_idx, uv_idx, norm_idx}
+	for i in 0..<len(obj_data.vertex_indices) {
+		vertex_identity := obj_data.vertex_indices[i]
 
 		if !(vertex_identity in vertex_locations) {
 			vertex_index := u32(len(vertex_buffer))
 			vertex_locations[vertex_identity] = vertex_index
-			vertex := VertexData{
-				pos = obj_data.vertices[pos_idx],
-				uv = obj_data.tex_coords[uv_idx],
-				norm = obj_data.normals[norm_idx],
-			}
+			insert_vertex_in_vertex_buffer(obj_data, &vertex_buffer, vertex_identity)
 			append(&index_buffer, vertex_index)
-			append(&vertex_buffer, vertex)
 		}
 		else {
 			vertex_index := vertex_locations[vertex_identity]
