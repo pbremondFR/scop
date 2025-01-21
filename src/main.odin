@@ -109,6 +109,11 @@ main :: proc() {
 		}
 	}
 
+	if len(os.args) < 2 {
+		fmt.println("Please give the 3D model .obj as an argument")
+		return
+	}
+
 	// GLFW_TRUE if successful, or GLFW_FALSE if an error occurred.
 	if(glfw.Init() != true){
 		fmt.println("Failed to initialize GLFW")
@@ -161,7 +166,7 @@ main :: proc() {
 
 	// Get desired .obj file from program arguments. main() doesn't take args,
 	// it's nore like in Python with os.args
-	file_path := os.args[1] if len(os.args) >= 2 else "resources/teapot.obj"
+	file_path := os.args[1]
 	obj_data, obj_ok := parse_obj_file(file_path)
 	if !obj_ok {
 		fmt.printfln("Failed to load `%v`", file_path)
@@ -233,8 +238,9 @@ main :: proc() {
 	}
 	defer gl.DeleteTextures(1, &texture.id)
 
-	gl.Enable(gl.CULL_FACE)
-	gl.CullFace(gl.BACK)
+	// Enable/disable backface culling
+	// gl.Enable(gl.CULL_FACE)
+	// gl.CullFace(gl.BACK)
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)

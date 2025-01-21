@@ -12,7 +12,16 @@ compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (
 	len := i32(len(shader_source))
 	gl.ShaderSource(shader_id, 1, &shader_source_cast, &len)
 	gl.CompileShader(shader_id)
-	if shader_id != 0 {
+
+	success: i32
+	gl.GetShaderiv(shader_id, gl.COMPILE_STATUS, &success);
+	if shader_id == 0 || success == 0 {
+		error_str: [512]u8
+		assert(size_of(error_str) == 512)
+		gl.GetShaderInfoLog(shader_id, size_of(error_str), nil, raw_data(error_str[:]));
+		fmt.printfln("Error compiling shader: %v", string(error_str[:]))
+	}
+	else {
 		ok = true
 	}
 	return
@@ -28,9 +37,11 @@ get_shader_program :: proc(vert_shader_path: string, frag_shader_path: string) -
 
 	vert_shader := compile_shader_from_source(string(vs_data), gl.VERTEX_SHADER) or_return
 	defer gl.DeleteShader(vert_shader)
+	fmt.printfln("Compiled %v", vert_shader_path)
 
 	frag_shader := compile_shader_from_source(string(fs_data), gl.FRAGMENT_SHADER) or_return
 	defer gl.DeleteShader(frag_shader)
+	fmt.printfln("Compiled %v", frag_shader_path)
 
 	program_id = gl.CreateProgram()
 	gl.AttachShader(program_id, vert_shader)
@@ -39,6 +50,12 @@ get_shader_program :: proc(vert_shader_path: string, frag_shader_path: string) -
 
 	success: i32
 	gl.GetProgramiv(program_id, gl.LINK_STATUS, &success);
+	if success == 0{
+		error_str: [512]u8
+		assert(size_of(error_str) == 512)
+		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
+		fmt.println("Error linking shader:", string(error_str[:]))
+	}
 
 	ok = (success != 0)
 	return
