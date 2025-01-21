@@ -168,7 +168,7 @@ main :: proc() {
 	}
 	defer delete_ObjFileData(obj_data)
 
-	model_offset := get_model_offset_vector(obj_data)
+	model_offset := get_model_offset_matrix(obj_data)
 
 	// ===== SHADERS =====
 	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
@@ -243,8 +243,6 @@ main :: proc() {
 
 		process_player_movements()
 
-		// fmt.println(state.player_cam)
-
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		gl.BindTexture(gl.TEXTURE_2D, texture.id)
@@ -256,13 +254,7 @@ main :: proc() {
 		if state.enable_model_spin {
 			time_accum += state.dt
 		}
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum)// * get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
-
-		// model_matrix[3][0] = model_offset.x
-		// model_matrix[3][1] = model_offset.y
-		// model_matrix[3][2] = model_offset.z
-		// model_matrix = UNIT_MAT4F
-
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * model_offset
 		view_matrix := state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
@@ -283,25 +275,30 @@ main :: proc() {
 
 }
 
-get_model_offset_vector :: proc(model: ObjFileData) -> Vec3f {
+get_model_offset_matrix :: proc(model: ObjFileData) -> Mat4f {
+	// Get min and max points of bounding box around model
 	min, max: Vec3f
 	for v in model.vert_positions {
-		// fmt.println("###", min, max, v)
-		if v.x < min.x || v.y < min.y || v.z < min.z do min = v
-		if v.x > max.x || v.y > max.y || v.z > max.z do max = v
+		for i in 0..<3 {
+			if v[i] < min[i] do min[i] = v[i]
+			if v[i] > max[i] do max[i] = v[i]
+		}
 	}
-	translation_vector := (max - min)
-	fmt.println("Offset vector:", translation_vector)
-	translation_vector /= 2
-	fmt.println("Offset vector:", translation_vector)
-	return translation_vector + min
+	half_diagonal := (max - min) /2
+	offset_vec := (min + half_diagonal) * -1
+	offset_mat := UNIT_MAT4F
+	offset_mat[3][0] = offset_vec.x
+	offset_mat[3][1] = offset_vec.y
+	offset_mat[3][2] = offset_vec.z
+	return offset_mat
 }
 
+// TODO: Gimball lock world-coordinates roll so we don't roll our virtual head? Like in FPS games
 process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}
-	look: Vec2f = {0, 0}
+	look: Vec3f = {0, 0, 0}
 	fov_delta: f32 = 0
-	pitch, yaw: f32
+	pitch, yaw, roll: f32
 
 	if state.glfw_inputs[glfw.KEY_W]			do movement.z += 1
 	if state.glfw_inputs[glfw.KEY_S]			do movement.z -= 1
@@ -314,6 +311,8 @@ process_player_movements :: proc() {
 	if state.glfw_inputs[glfw.KEY_DOWN]		do look.y += 1
 	if state.glfw_inputs[glfw.KEY_LEFT]		do look.x -= 1
 	if state.glfw_inputs[glfw.KEY_RIGHT]	do look.x += 1
+	if state.glfw_inputs[glfw.KEY_Q]		do look.z -= 1
+	if state.glfw_inputs[glfw.KEY_E]		do look.z += 1
 
 	if state.glfw_inputs[glfw.KEY_Z]	do fov_delta += 1
 	if state.glfw_inputs[glfw.KEY_X]	do fov_delta -= 1
@@ -329,6 +328,7 @@ process_player_movements :: proc() {
 
 	pitch = look.y
 	yaw = look.x
+	roll = look.z
 
 	movement_mat := UNIT_MAT4F
 	// XXX: CAREFUL WITH THE WAY YOU INDEX MATRICES IN ODIN!
@@ -344,8 +344,9 @@ process_player_movements :: proc() {
 
 	pitch_mat := get_rotation_matrix4_x_axis(pitch)
 	yaw_mat := get_rotation_matrix4_y_axis(yaw)
+	roll_mat := get_rotation_matrix4_z_axis(roll)
 
-	look_mat := yaw_mat * pitch_mat
+	look_mat := roll_mat * yaw_mat * pitch_mat
 
 	state.player_cam = look_mat * movement_mat * state.player_cam
 	state.fov += fov_delta * f32(state.dt) * PLAYER_FOV_SPEED
@@ -373,7 +374,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 			gl.Enable(gl.CULL_FACE)
 		}
 	}
-	else if key == glfw.KEY_BACKSLASH && action == glfw.PRESS {
+	else if key == glfw.KEY_R && action == glfw.PRESS {
 		state.enable_model_spin = !state.enable_model_spin
 	}
 
