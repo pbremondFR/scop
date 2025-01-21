@@ -99,30 +99,35 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
 	for i in 1..=len(split_str) - 2 {
 
-		indexes_x := strings.split(split_str[0], "/", context.temp_allocator)
-		indexes_y := strings.split(split_str[i], "/", context.temp_allocator)
-		indexes_z := strings.split(split_str[i + 1], "/", context.temp_allocator)
+		// Attribute indexes of points A, B, C on the currently parsed triangle
+		indexes_a := strings.split(split_str[0], "/", context.temp_allocator)
+		indexes_b := strings.split(split_str[i], "/", context.temp_allocator)
+		indexes_c := strings.split(split_str[i + 1], "/", context.temp_allocator)
 
 		// "or_return -1" -> weird syntax. Means parsed u64 -1, or_return on error.
 		pos_indices := [3]u32{
-			(cast(u32)strconv.parse_u64(indexes_x[0]) or_return) -1,
-			(cast(u32)strconv.parse_u64(indexes_y[0]) or_return) -1,
-			(cast(u32)strconv.parse_u64(indexes_z[0]) or_return) -1,
+			(cast(u32)strconv.parse_u64(indexes_a[0]) or_return) -1,
+			(cast(u32)strconv.parse_u64(indexes_b[0]) or_return) -1,
+			(cast(u32)strconv.parse_u64(indexes_c[0]) or_return) -1,
 		}
-		// FIXME: Also buffer overflow but like not here
 		// XXX: If UV or normal indices aren't specified, they're set to UINT32_MAX.
 		// This is because integer underflow is well-defined in Odin (0 - 1 will go to UINT32_MAX)
-		// The parsing pipeline further down should recognize this and handle it.
+		// The parsing pipeline further down MUST recognize this and handle it.
 		uv_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[1]) or_else 0) - 1,
-			u32(strconv.parse_u64(indexes_y[1]) or_else 0) - 1,
-			u32(strconv.parse_u64(indexes_z[1]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_a[1]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_b[1]) or_else 0) - 1,
+			u32(strconv.parse_u64(indexes_c[1]) or_else 0) - 1,
 		}
-		// FIXME: Buffer overflow when normals are not specified
-		normals_indices := [3]u32{
-			u32(strconv.parse_u64(indexes_x[2]) or_else 0) - 1,
-			u32(strconv.parse_u64(indexes_y[2]) or_else 0) - 1,
-			u32(strconv.parse_u64(indexes_z[2]) or_else 0) - 1,
+		normals_indices : [3]u32
+		if len(indexes_a) > 2 {
+			normals_indices = [3]u32{
+				u32(strconv.parse_u64(indexes_a[2]) or_else 0) - 1,
+				u32(strconv.parse_u64(indexes_b[2]) or_else 0) - 1,
+				u32(strconv.parse_u64(indexes_c[2]) or_else 0) - 1,
+			}
+		}
+		else {
+			normals_indices = [3]u32{clang.UINT32_MAX, clang.UINT32_MAX, clang.UINT32_MAX}
 		}
 		to_append := [3]ObjFileVertexIndices{
 			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0]},
@@ -130,10 +135,6 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2]}
 		}
 		append(&obj_data.vertex_indices, ..to_append[:])
-
-		// append(&obj_data.face_vertex_idx, pos_indices[0], pos_indices[1], pos_indices[2])
-		// append(&obj_data.face_texture_idx, uv_indices[0], uv_indices[1], uv_indices[2])
-		// append(&obj_data.face_normal_idx, normals_indices[0], normals_indices[1], normals_indices[2])
 	}
 	return true
 

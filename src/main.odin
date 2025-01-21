@@ -213,7 +213,7 @@ main :: proc() {
 	gl.BindVertexArray(0)
 
 	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/Rafale-airframe_baseColor.bmp")
+	texture, texture_ok := get_gl_texture("resources/monki.bmp")
 	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
@@ -256,7 +256,7 @@ main :: proc() {
 		if state.enable_model_spin {
 			time += state.dt
 		}
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time) //* get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time)// * get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
 
 		// model_matrix[3][0] = model_offset.x
 		// model_matrix[3][1] = model_offset.y

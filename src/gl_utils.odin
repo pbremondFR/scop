@@ -86,13 +86,18 @@ VertexData :: struct #packed {
 }
 
 @(private="file")
-insert_vertex_in_vertex_buffer :: proc(
+append_vertex_in_vertex_buffer :: proc(
 	obj_data: ^ObjFileData,
 	vertex_buffer: ^[dynamic]VertexData,
 	vertex_id: ObjFileVertexIndices)
 {
 	vertex_id := vertex_id
 
+	/*
+	 * A non-existant index is signaled by a UINT32_MAX. In this case, append appropriate zero-filled
+	 * vertex attribute in the corresponding array, and change that index to match that new zero-flled
+	 * attribute. This way, no OOB read is done when we dereference it below.
+	 */
 	if vertex_id.uv_idx == clang.UINT32_MAX {
 		new_idx := u32(len(obj_data.tex_coords))
 		append(&obj_data.tex_coords, [3]f32{0, 0, 0})
@@ -103,6 +108,9 @@ insert_vertex_in_vertex_buffer :: proc(
 		append(&obj_data.normals, [3]f32{0, 0, 0})
 		vertex_id.norm_idx = new_idx
 	}
+
+	// Insert this vertex with all needed attributes in the vertex buffer. If we're here,
+	// it means it's a new unique vertex, otherwise we'd just insert an index in the EBO.
 	vertex := VertexData{
 		pos = obj_data.vert_positions[vertex_id.pos_idx],
 		uv = obj_data.tex_coords[vertex_id.uv_idx],
@@ -111,27 +119,45 @@ insert_vertex_in_vertex_buffer :: proc(
 	append(vertex_buffer, vertex)
 }
 
+/*
+ * Convert the Wavefront OBJ representation of a 3D model to a vertex & an index buffer, which can be
+ * used by OpenGL to draw them.
+ * This function may add data to some members of obj_data, which is why it is given as a pointer.
+ */
 obj_data_to_vertex_buffer :: proc(obj_data: ^ObjFileData) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 	vertex_buffer := make([dynamic]VertexData)
 	index_buffer := make([dynamic]u32)
 
-	ObjFileVertexIdentifier :: struct {
-		pos_idx: u32, uv_idx: u32, norm_idx: u32
-	}
-	vertex_locations := make(map[ObjFileVertexIndices]u32)
-	defer delete(vertex_locations)
+	/*
+	 * Preface/REMINDER: A VERTEX IS NOT JUST A POSITION. The vertex's position is only one of its ATTRIBUTES.
+	 *
+	 * In the Wavefront OBJ format, faces are defined as 3 (or more) indexes referring to a position,
+	 * a texture coordinate (or UV), and a normal vector. These indexes refer to the .obj file's arrays,
+	 * NOT OpenGL EBO indexes. A combination of these indexes (and thus vertex attributes) uniquely
+	 * identifies a vertex. Of course, different faces may share a unique vertex, which makes using an
+	 * index buffer (EBO) a very good idea.
+	 *
+	 * This map associates a unique vertex identifier with its location in the OpenGL vertex buffer (VBO).
+	 * When iterating through the .obj file's faces, if a unique vertex is already stored in the
+	 * vertex buffer (VBO), its index is pushed in the index buffer (EBO), thus avoiding a duplicate
+	 * vertex in the VBO.
+	 */
+	vertex_ebo_locations := make(map[ObjFileVertexIndices]u32)
+	defer delete(vertex_ebo_locations)
 
 	for i in 0..<len(obj_data.vertex_indices) {
 		vertex_identity := obj_data.vertex_indices[i]
 
-		if !(vertex_identity in vertex_locations) {
+		if !(vertex_identity in vertex_ebo_locations) {
+			// This vertex is still unique, insert it
 			vertex_index := u32(len(vertex_buffer))
-			vertex_locations[vertex_identity] = vertex_index
-			insert_vertex_in_vertex_buffer(obj_data, &vertex_buffer, vertex_identity)
+			vertex_ebo_locations[vertex_identity] = vertex_index
+			append_vertex_in_vertex_buffer(obj_data, &vertex_buffer, vertex_identity)
 			append(&index_buffer, vertex_index)
 		}
 		else {
-			vertex_index := vertex_locations[vertex_identity]
+			// This vertex has been seen before, just push its index in the index buffer.
+			vertex_index := vertex_ebo_locations[vertex_identity]
 			append(&index_buffer, vertex_index)
 		}
 	}
