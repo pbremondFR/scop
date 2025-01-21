@@ -252,11 +252,11 @@ main :: proc() {
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
 
-		@(static) time: f64 = 0
+		@(static) time_accum: f64 = 0
 		if state.enable_model_spin {
-			time += state.dt
+			time_accum += state.dt
 		}
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time)// * get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum)// * get_rotation_matrix4_x_axis(math.to_radians_f32(-90))
 
 		// model_matrix[3][0] = model_offset.x
 		// model_matrix[3][1] = model_offset.y
