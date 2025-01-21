@@ -37,7 +37,10 @@ get_shader_program :: proc(vert_shader_path: string, frag_shader_path: string) -
 	gl.AttachShader(program_id, frag_shader)
 	gl.LinkProgram(program_id)
 
-	ok = true
+	success: i32
+	gl.GetProgramiv(program_id, gl.LINK_STATUS, &success);
+
+	ok = (success != 0)
 	return
 }
 

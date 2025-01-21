@@ -53,6 +53,12 @@ PLAYER_TRANSLATE_SPEED	:f32 : 30
 PLAYER_ROTATION_SPEED	:f32 : 2
 PLAYER_FOV_SPEED		:f32 : 1
 
+ShaderProgram :: enum {
+	FaceNormals,
+	VertNormals,
+	Texture,
+}
+
 State :: struct {
 	window_size: [2]i32,
 	fov: f32,
@@ -60,28 +66,23 @@ State :: struct {
 	glfw_inputs: map[i32]bool,
 	player_cam: Mat4f,
 	enable_model_spin: bool,
+	shader_program: ShaderProgram,
 }
 
 state := State{
 	window_size = {1024, 1024},
 	fov = math.to_radians_f32(70.0),
+	// TODO: Initialize player camera to a position that adapts to the object's size
 	player_cam = {
 		1.0, 0.0, 0.0, 0.0,
 		0.0, 1.0, 0.0, 0.0,
 		0.0, 0.0, 1.0, -15.0,
 		0.0, 0.0, 0.0, 1.0,
-	}
+	},
+	shader_program = .FaceNormals,
 }
 
-get_unit_matrix :: proc() -> Mat4f {
-	return Mat4f{
-		1.0, 0.0, 0.0, 0.0,
-		0.0, 1.0, 0.0, 0.0,
-		0.0, 0.0, 1.0, 0.0,
-		0.0, 0.0, 0.0, 1.0,
-	}
-}
-
+// For tracking allocator below (leaks/double free debugging)
 import "core:mem"
 
 main :: proc() {
@@ -171,9 +172,20 @@ main :: proc() {
 	model_offset := get_model_offset_matrix(obj_data)
 
 	// ===== SHADERS =====
-	shader_program, shader_ok := get_shader_program("triangle.vert", "triangle.frag")
-	assert(shader_ok, "Failed to load shaders")
-	defer gl.DeleteProgram(shader_program)
+	shader_programs := [ShaderProgram]u32 {
+		.FaceNormals = get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
+		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
+		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
+	}
+	if shader_programs[.FaceNormals] == 0 || shader_programs[.VertNormals] == 0 \
+		|| shader_programs[.Texture] == 0
+	{
+		fmt.printfln("Error creating shaders")
+		return
+	}
+	defer {
+		for id in shader_programs do gl.DeleteProgram(id)
+	}
 
 	// Setup VAO, VBO, EBO
 	vao, vbo, ebo: u32
@@ -213,8 +225,8 @@ main :: proc() {
 	gl.BindVertexArray(0)
 
 	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/monki.bmp")
-	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
+	// texture, texture_ok := get_gl_texture("resources/monki.bmp")
+	texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
 		return
@@ -246,7 +258,7 @@ main :: proc() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		gl.BindTexture(gl.TEXTURE_2D, texture.id)
-		gl.UseProgram(shader_program)
+		gl.UseProgram(shader_programs[state.shader_program])
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
 
@@ -258,13 +270,13 @@ main :: proc() {
 		view_matrix := state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
-		model_loc := gl.GetUniformLocation(shader_program, "model")
+		model_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "model")
 		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
 
-		view_loc := gl.GetUniformLocation(shader_program, "view")
+		view_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "view")
 		gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, &view_matrix[0, 0])
 
-		proj_loc := gl.GetUniformLocation(shader_program, "projection")
+		proj_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "projection")
 		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
 
 		gl.BindVertexArray(vao)
@@ -311,8 +323,8 @@ process_player_movements :: proc() {
 	if state.glfw_inputs[glfw.KEY_DOWN]		do look.y += 1
 	if state.glfw_inputs[glfw.KEY_LEFT]		do look.x -= 1
 	if state.glfw_inputs[glfw.KEY_RIGHT]	do look.x += 1
-	if state.glfw_inputs[glfw.KEY_Q]		do look.z -= 1
-	if state.glfw_inputs[glfw.KEY_E]		do look.z += 1
+	if state.glfw_inputs[glfw.KEY_Q]		do look.z += 1
+	if state.glfw_inputs[glfw.KEY_E]		do look.z -= 1
 
 	if state.glfw_inputs[glfw.KEY_Z]	do fov_delta += 1
 	if state.glfw_inputs[glfw.KEY_X]	do fov_delta -= 1
@@ -376,6 +388,10 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	}
 	else if key == glfw.KEY_R && action == glfw.PRESS {
 		state.enable_model_spin = !state.enable_model_spin
+	}
+	else if (key >= glfw.KEY_1 && key <= glfw.KEY_3) && action == glfw.PRESS {
+		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
+		state.shader_program = selected_shader
 	}
 
 	if action == glfw.PRESS {
