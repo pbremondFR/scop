@@ -37,9 +37,12 @@ void main()
 	// Diffuse lighting
 	vec3 diffuse_color = materials[MtlID].Kd;
 	vec3 norm = normalize(Normal);
+	if (length(norm) == 0) {
+		norm = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+	}
 	vec3 lightDir = normalize(light_pos - FragPos);
 	float diff = max(dot(norm, lightDir), 0.0);
-	vec3 diffuse = diff * light_color;
+	vec3 diffuse = diff * diffuse_color * light_color;
 
 	// Specular lighting
 	// FIXME: Problems with camera angles make secular lighting weird
@@ -48,7 +51,7 @@ void main()
 	vec3 viewDir = normalize(view_pos - FragPos);
 	vec3 reflectDir = reflect(-lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
-	vec3 specular = spec * light_color * spec_color;
+	vec3 specular = spec * spec_color * light_color;
 
 	// Texture color
 	vec4 texture_color = texture(ourTexture, Uv);

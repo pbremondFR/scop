@@ -262,6 +262,8 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 			parse_vec3(split_line[1:], &active_material.Kd) or_return
 		case "Ks":
 			parse_vec3(split_line[1:], &active_material.Ks) or_return
+		case "Ns":
+			active_material.Ns = strconv.parse_f32(split_line[1]) or_else 32
 		case "Tr":
 			active_material.Tr = strconv.parse_f32(split_line[1]) or_else 0.0
 		case "d":

@@ -222,7 +222,7 @@ main :: proc() {
 	materials_array := materials_map_to_array(materials)
 	defer delete(materials_array)
 	for m, idx in materials_array {
-		fmt.printfln("Material %v (%v):\tKa: %v\tTr: %v", m.name, idx, m.Ka, m.Tr)
+		fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
 	}
 	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials_array)
 
