@@ -45,11 +45,14 @@ void main()
 	vec3 diffuse = diff * diffuse_color * light_color;
 
 	// Specular lighting
-	// FIXME: Problems with camera angles make secular lighting weird
+	// FIXME: Problems with camera angles make specular lighting weird
 	vec3 spec_color = materials[MtlID].Ks;
 	float spec_exponent = materials[MtlID].Ns;
 	vec3 viewDir = normalize(view_pos - FragPos);
-	vec3 reflectDir = reflect(-lightDir, norm);
+	// TESTME: Specular highlights on wrong side of model
+	// I think the second reflect() call is the correct one...
+	// vec3 reflectDir = reflect(-lightDir, norm);
+	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
 	vec3 specular = spec * spec_color * light_color;
 
