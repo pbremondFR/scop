@@ -213,21 +213,15 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []Wave
 	return vertex_buffer[:], index_buffer[:]
 }
 
-// XXX: Had to reorder members & add in some padding members to be compliant with
-// GLSL std140 layout
+// XXX: Had to reorder members to get rid of padding & be compliant with GLSL std140 layout
 MaterialData :: struct #packed {
 	Ka: Vec3f "Ambient color",
-_pad1: f32,
-	Kd: Vec3f "Diffuse color",
-_pad2: f32,
-	Ks: Vec3f "Specular color",
-_pad3: f32,
-	// TESTME: I think #align(4) will fuck things up with std140 here
-	Tf: Vec3f "Transmission filter color",
-_pad4: f32,
 	Ns: f32 "Specular exponent",
+	Kd: Vec3f "Diffuse color",
 	Tr: f32 "Transparency", // Also known as "d" (disolve)
+	Ks: Vec3f "Specular color",
 	Ni: f32 "Index of refraction",
+	Tf: Vec3f "Transmission filter color",
 	illum: IlluminationModel "Illumination model",
 }
 

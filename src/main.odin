@@ -214,7 +214,7 @@ main :: proc() {
 	materials_array := materials_map_to_array(materials)
 	defer delete(materials_array)
 	for m, idx in materials_array {
-		fmt.printfln("Material %v (%v):\tKa: %v", m.name, idx, m.Ka)
+		fmt.printfln("Material %v (%v):\tKa: %v\tTr: %v", m.name, idx, m.Ka, m.Tr)
 	}
 	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials_array)
 
@@ -415,12 +415,14 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		// Odin-style ternary (looks cool, but a bit weird coming from C, order is different)
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE if wireframe else gl.FILL)
 		// You can also use C-style ternaries! YAAAAY
+
+		// XXX: Don't use backface culling at least for now
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
-		if wireframe {
-			gl.Disable(gl.CULL_FACE)
-		} else {
-			gl.Enable(gl.CULL_FACE)
-		}
+		// if wireframe {
+		// 	gl.Disable(gl.CULL_FACE)
+		// } else {
+		// 	gl.Enable(gl.CULL_FACE)
+		// }
 	}
 	else if key == glfw.KEY_R && action == glfw.PRESS {
 		state.enable_model_spin = !state.enable_model_spin

@@ -5,6 +5,7 @@ import "core:mem/virtual"
 import "core:strings"
 import "core:fmt"
 import "core:strconv"
+import "core:path/filepath"
 import clang "core:c"
 
 Vec2f :: [2]f32
@@ -34,11 +35,6 @@ IlluminationModel :: enum u32 {
 	ReflectionOnRaytraceOff,
 	TransparencyGlassOnRelfectionRaytraceOff,
 	CastsShadowOntoInvisibleSurfaces,
-}
-
-@(private="file")
-IndexRange :: struct {
-	begin: u32, end: u32
 }
 
 WavefrontMaterial :: struct {
@@ -219,8 +215,12 @@ parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
 	return
 }
 
-parse_mtl_file :: proc(mtl_file_path: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
+parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
 	using virtual.Map_File_Flag
+
+	mtl_file_path := filepath.join({working_dir, mtl_file_name})
+	defer delete(mtl_file_path)
+
 	file_contents, err := virtual.map_file_from_path(mtl_file_path, {.Read})
 	if err != nil {
 		fmt.printfln("Error mapping `%v`: %v", mtl_file_path, err)
@@ -260,6 +260,10 @@ parse_mtl_file :: proc(mtl_file_path: string) -> (materials: map[string]Wavefron
 			parse_vec3(split_line[1:], &active_material.Kd) or_return
 		case "Ks":
 			parse_vec3(split_line[1:], &active_material.Ks) or_return
+		case "Tr":
+			active_material.Tr = strconv.parse_f32(split_line[1]) or_else 0.0
+		case "d":
+			active_material.Tr = 1.0 - (strconv.parse_f32(split_line[1]) or_else 0.0)
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)
 		}
@@ -283,13 +287,15 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))
 
+	working_dir := filepath.dir(obj_file_path)
+	defer delete(working_dir)
+
 	materials = map[string]WavefrontMaterial{
 		DEFAULT_MATERIAL.name = DEFAULT_MATERIAL
 	}
 	// TESTME: This should not be freed, right??? I don't see an allocation?
 	active_material_name := DEFAULT_MATERIAL.name
 
-	vertex_range: IndexRange
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
 		hash_index := strings.index_byte(line, '#')
@@ -314,10 +320,9 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			} else {
 				parse_easy_face(&obj_data, split_line[1:], active_material_name) or_return
 			}
-			vertex_range.end += 1
 		case "mtllib":
 			delete(materials)
-			materials = parse_mtl_file(split_line[1]) or_return
+			materials = parse_mtl_file(split_line[1], working_dir) or_return
 		case "usemtl":
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
@@ -326,13 +331,6 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			// FIXME: This memory will be freed by the "free_all(temp_allocator)" call, right?
 			// Use after free?
 			active_material_name = split_line[1]
-
-			// Reset the active range to these new indices
-			// TODO: Could also just do begin = end?
-			// TESTME: Check for off-by-1 errors in the indexes.
-			// XXX: We're doing 0-based indexing here as we're in Odin-land, not in the .obj file
-			vertex_range.begin = u32(len(obj_data.normals))
-			vertex_range.end = vertex_range.begin
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)
 		}
