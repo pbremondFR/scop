@@ -15,10 +15,11 @@ Vec2d :: [2]f64
 Vec3d :: [3]f64
 Vec4d :: [4]f64
 
-ObjFileVertexIndices :: struct {
+WavefrontVertexID :: struct {
 	pos_idx: u32,
 	uv_idx: u32,
 	norm_idx: u32,
+	material: string,
 }
 
 IlluminationModel :: enum {
@@ -60,17 +61,11 @@ WavefrontMaterial :: struct {
 	map_bump: string "Bump map",
 	disp_map: string "Displacement map",
 	decal: string "Stencil decal texture",
-
-	// Store begin and end indices of each vertex attribute that this material binds to
-	v_ranges: [dynamic]IndexRange,
-	vt_ranges: [dynamic]IndexRange,
-	vn_ranges: [dynamic]IndexRange,
 }
 
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
-	delete(mtl.v_ranges)
-	delete(mtl.vt_ranges)
-	delete(mtl.vn_ranges)
+	// TODO: delete strings of maps if I ever get around to implementing that
+	// delete(mtl.vertex_ranges)
 }
 
 DEFAULT_MATERIAL :: WavefrontMaterial {
@@ -85,7 +80,7 @@ WavefrontObjFile :: struct {
 	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
 	normals:	[dynamic]Vec3f,
 
-	vertex_indices:	[dynamic]ObjFileVertexIndices,
+	vertex_indices:	[dynamic]WavefrontVertexID,
 }
 
 delete_ObjFileData :: proc(data: WavefrontObjFile) {
@@ -132,7 +127,7 @@ parse_vertex_normal :: proc(obj_data: ^WavefrontObjFile, split_str: []string) ->
 // https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
 // https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
 @(private="file")
-parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
+parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -142,10 +137,10 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> boo
 			cast(u32)strconv.parse_u64(split_str[i]) or_return - 1,
 			cast(u32)strconv.parse_u64(split_str[i + 1]) or_return - 1,
 		}
-		to_append := [3]ObjFileVertexIndices{
-			{pos_idx = pos_indices[0], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX},
-			{pos_idx = pos_indices[1], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX},
-			{pos_idx = pos_indices[2], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX}
+		to_append := [3]WavefrontVertexID{
+			{pos_idx = pos_indices[0], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name},
+			{pos_idx = pos_indices[1], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name},
+			{pos_idx = pos_indices[2], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name}
 		}
 		append(&obj_data.vertex_indices, ..to_append[:])
 
@@ -154,7 +149,7 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> boo
 }
 
 @(private="file")
-parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
+parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: string) -> bool {
 	assert(len(split_str) >= 3)
 	// For each vertex, parse index data (v/vt/vn). UVs and normals are optional
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -190,10 +185,10 @@ parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> boo
 		else {
 			normals_indices = [3]u32{clang.UINT32_MAX, clang.UINT32_MAX, clang.UINT32_MAX}
 		}
-		to_append := [3]ObjFileVertexIndices{
-			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0]},
-			{pos_idx = pos_indices[1], uv_idx = uv_indices[1], norm_idx = normals_indices[1]},
-			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2]}
+		to_append := [3]WavefrontVertexID{
+			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0], material = material_name},
+			{pos_idx = pos_indices[1], uv_idx = uv_indices[1], norm_idx = normals_indices[1], material = material_name},
+			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2], material = material_name}
 		}
 		append(&obj_data.vertex_indices, ..to_append[:])
 	}
@@ -288,9 +283,10 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	materials = map[string]WavefrontMaterial{
 		DEFAULT_MATERIAL.name = DEFAULT_MATERIAL
 	}
-	active_material_name := string(DEFAULT_MATERIAL.name)
+	// TESTME: This should not be freed, right??? I don't see an allocation?
+	active_material_name := DEFAULT_MATERIAL.name
 
-	v_range, vt_range, vn_range: IndexRange
+	vertex_range: IndexRange
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
 		hash_index := strings.index_byte(line, '#')
@@ -307,45 +303,36 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		switch split_line[0] {
 		case "v":
 			parse_vertex(&obj_data, split_line[1:]) or_return
-			v_range.end += 1
 		case "vt":
 			parse_vertex_texture(&obj_data, split_line[1:]) or_return
-			vt_range.end += 1
 		case "vn":
 			parse_vertex_normal(&obj_data, split_line[1:]) or_return
-			vn_range.end += 1
 		case "f":
 			if strings.contains_rune(to_parse, '/') {
-				parse_hard_face(&obj_data, split_line[1:]) or_return
+				parse_hard_face(&obj_data, split_line[1:], active_material_name) or_return
 			} else {
-				parse_easy_face(&obj_data, split_line[1:]) or_return
+				parse_easy_face(&obj_data, split_line[1:], active_material_name) or_return
 			}
+			vertex_range.end += 1
 		case "mtllib":
 			delete(materials)
 			materials = parse_mtl_file(split_line[1]) or_return
 		case "usemtl":
-			// XXX: If faces are also supposed to be affected by the material, we'll need to rework
-			// this part, probably by also tracking the face index.
-			// Append currently active indices range to material's bound ranges
-			append(&active_material.v_ranges, v_range)
-			append(&active_material.vt_ranges, vt_range)
-			append(&active_material.vn_ranges, vn_range)
-
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
 			// but that might be overkill/beyond the Wavefront spec
 			if !(split_line[1] in materials) do return
+			// FIXME: This memory will be freed by the "free_all(temp_allocator)" call, right?
+			// Use after free?
 			active_material_name = split_line[1]
 			active_material = &materials[active_material_name]
 
 			// Reset the active range to these new indices
 			// TODO: Could also just do begin = end?
-			v_range.begin = u32(len(obj_data.vert_positions))
-			vt_range.begin = u32(len(obj_data.tex_coords))
-			vn_range.begin = u32(len(obj_data.normals))
-			v_range.end = v_range.begin
-			vt_range.end = vt_range.begin
-			vn_range.end = vn_range.begin
+			// TESTME: Check for off-by-1 errors in the indexes.
+			// XXX: We're doing 0-based indexing here as we're in Odin-land, not in the .obj file
+			vertex_range.begin = u32(len(obj_data.normals))
+			vertex_range.end = vertex_range.begin
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)
 		}

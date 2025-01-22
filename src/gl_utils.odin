@@ -101,17 +101,28 @@ get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 
 VertexData :: struct #packed {
 	pos: Vec3f "pos",
-	uv: Vec3f "uv",
+	uv: Vec2f "uv",
+	material_idx: u32 "Material index",
 	norm: Vec3f "norm",
 }
 
 @(private="file")
 append_vertex_in_vertex_buffer :: proc(
 	obj_data: ^WavefrontObjFile,
+	materials: []WavefrontMaterial,
 	vertex_buffer: ^[dynamic]VertexData,
-	vertex_id: ObjFileVertexIndices)
+	vertex_id: WavefrontVertexID)
 {
 	vertex_id := vertex_id
+
+	// XXX: Assume material name always exists here, it's ensured in the obj parser atm
+	material_index: u32
+	for i in 0..<len(materials) {
+		if materials[i].name == vertex_id.material {
+			material_index = u32(i)
+			break
+		}
+	}
 
 	/*
 	 * A non-existant index is signaled by a UINT32_MAX. In this case, append appropriate zero-filled
@@ -133,10 +144,22 @@ append_vertex_in_vertex_buffer :: proc(
 	// it means it's a new unique vertex, otherwise we'd just insert an index in the EBO.
 	vertex := VertexData{
 		pos = obj_data.vert_positions[vertex_id.pos_idx],
-		uv = obj_data.tex_coords[vertex_id.uv_idx],
+		uv = obj_data.tex_coords[vertex_id.uv_idx].xy,
+		material_idx = material_index,
 		norm = obj_data.normals[vertex_id.norm_idx],
 	}
 	append(vertex_buffer, vertex)
+}
+
+materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []WavefrontMaterial {
+	output_array := make([]WavefrontMaterial, len(materials))
+
+	i := 0
+	for key, &material in materials {
+		output_array[i] = material
+		i += 1
+	}
+	return output_array
 }
 
 /*
@@ -144,9 +167,13 @@ append_vertex_in_vertex_buffer :: proc(
  * used by OpenGL to draw them.
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
-obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
+obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 	vertex_buffer := make([dynamic]VertexData)
 	index_buffer := make([dynamic]u32)
+
+	// Store materials in array so we can iterate over it faster when looking for an index
+	materials_array := materials_map_to_array(materials)
+	defer delete(materials_array)
 
 	/*
 	 * Preface/REMINDER: A VERTEX IS NOT JUST A POSITION. The vertex's position is only one of its ATTRIBUTES.
@@ -162,7 +189,7 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile) -> (vertex_buffer
 	 * vertex buffer (VBO), its index is pushed in the index buffer (EBO), thus avoiding a duplicate
 	 * vertex in the VBO.
 	 */
-	vertex_ebo_locations := make(map[ObjFileVertexIndices]u32)
+	vertex_ebo_locations := make(map[WavefrontVertexID]u32)
 	defer delete(vertex_ebo_locations)
 
 	for i in 0..<len(obj_data.vertex_indices) {
@@ -172,7 +199,7 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile) -> (vertex_buffer
 			// This vertex is still unique, insert it
 			vertex_index := u32(len(vertex_buffer))
 			vertex_ebo_locations[vertex_identity] = vertex_index
-			append_vertex_in_vertex_buffer(obj_data, &vertex_buffer, vertex_identity)
+			append_vertex_in_vertex_buffer(obj_data, materials_array, &vertex_buffer, vertex_identity)
 			append(&index_buffer, vertex_index)
 		}
 		else {

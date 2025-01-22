@@ -179,10 +179,7 @@ main :: proc() {
 	}
 
 	for key, &mtl in materials {
-		fmt.printfln("Material %v:\n", mtl.name)
-		fmt.printfln("v_ranges: %v\n", mtl.v_ranges)
-		fmt.printfln("vt_ranges: %v\n", mtl.vt_ranges)
-		fmt.printfln("vn_ranges: %v\n", mtl.vn_ranges)
+		fmt.printfln("Material %v:\n%v", mtl.name, mtl)
 	}
 
 	model_offset := get_model_offset_matrix(obj_data)
@@ -214,7 +211,7 @@ main :: proc() {
 
 	gl.BindVertexArray(vao)
 
-	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data)
+	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
@@ -225,11 +222,17 @@ main :: proc() {
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
 	gl.EnableVertexAttribArray(0)
 
-	gl.VertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
 	gl.EnableVertexAttribArray(1)
 
-	gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
+	assert(offset_of(VertexData, uv) == 12)
+	assert(offset_of(VertexData, material_idx) == 20)
+	assert(offset_of(VertexData, norm) == 24)
+	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(vertex_buffer[0]), offset_of(VertexData, material_idx))
 	gl.EnableVertexAttribArray(2)
+
+	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
+	gl.EnableVertexAttribArray(3)
 
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
