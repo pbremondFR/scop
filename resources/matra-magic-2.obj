@@ -1,7 +1,8 @@
 # 3ds Max Wavefront OBJ Exporter v0.97b - (c)2007 guruware
 # File Created: 12.09.2019 00:15:51
 
-mtllib matra-magic-2.mtl
+# Edited the path because I haven't coded search from .obj dir yet
+mtllib resources/matra-magic-2.mtl
 
 #
 # object fuselaje

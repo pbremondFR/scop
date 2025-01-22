@@ -167,12 +167,23 @@ main :: proc() {
 	// Get desired .obj file from program arguments. main() doesn't take args,
 	// it's nore like in Python with os.args
 	file_path := os.args[1]
-	obj_data, obj_ok := parse_obj_file(file_path)
+	obj_data, materials, obj_ok := parse_obj_file(file_path)
 	if !obj_ok {
 		fmt.printfln("Failed to load `%v`", file_path)
 		return
 	}
 	defer delete_ObjFileData(obj_data)
+	defer {
+		for ley, &mtl in materials do delete_WavefrontMaterial(mtl)
+		delete(materials)
+	}
+
+	for key, &mtl in materials {
+		fmt.printfln("Material %v:\n", mtl.name)
+		fmt.printfln("v_ranges: %v\n", mtl.v_ranges)
+		fmt.printfln("vt_ranges: %v\n", mtl.vt_ranges)
+		fmt.printfln("vn_ranges: %v\n", mtl.vn_ranges)
+	}
 
 	model_offset := get_model_offset_matrix(obj_data)
 
@@ -230,8 +241,8 @@ main :: proc() {
 	gl.BindVertexArray(0)
 
 	// === TEXTURES ===
-	// texture, texture_ok := get_gl_texture("resources/monki.bmp")
-	texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
+	texture, texture_ok := get_gl_texture("resources/monki.bmp")
+	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
 		return
@@ -293,7 +304,7 @@ main :: proc() {
 
 }
 
-get_model_offset_matrix :: proc(model: ObjFileData) -> Mat4f {
+get_model_offset_matrix :: proc(model: WavefrontObjFile) -> Mat4f {
 	// Get min and max points of bounding box around model
 	min, max: Vec3f
 	for v in model.vert_positions {

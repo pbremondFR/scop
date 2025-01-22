@@ -21,7 +21,66 @@ ObjFileVertexIndices :: struct {
 	norm_idx: u32,
 }
 
-ObjFileData :: struct {
+IlluminationModel :: enum {
+	ColorOnAmbientOff,
+	ColorOnAmbientOn,
+	HightlightOn,
+	ReflectionOnRaytraceOn,
+	TransparencyGlassOnReflectionRaytraceOn,
+	ReflectionFresnelOnRaytraceOn,
+	TransparencyRefractionOnReflectionFresnelOffRaytraceOn,
+	TransparencyRefractionOnReflectionFresnelOnRaytraceOn,
+	ReflectionOnRaytraceOff,
+	TransparencyGlassOnRelfectionRaytraceOff,
+	CastsShadowOntoInvisibleSurfaces,
+}
+
+@(private="file")
+IndexRange :: struct {
+	begin: u32, end: u32
+}
+
+WavefrontMaterial :: struct {
+	name: string "Material name",
+
+	Ka: Vec3f "Ambient color",
+	Kd: Vec3f "Diffuse color",
+	Ks: Vec3f "Specular color",
+	Ns: f32 "Specular exponent",
+	Tr: f32 "Transparency", // Also known as "d" (disolve)
+	Tf: Vec3f "Transmission filter color",
+	Ni: f32 "Index of refraction",
+	illum: IlluminationModel "Illumination model",
+
+	map_Ka: string "Ambient texture map",
+	map_Kd: string "Diffuse texture map",
+	map_Ks: string "Specular color texture map",
+	map_Ns: string "Specular highlight component",
+	map_d: string "Alpha texture map",
+	map_bump: string "Bump map",
+	disp_map: string "Displacement map",
+	decal: string "Stencil decal texture",
+
+	// Store begin and end indices of each vertex attribute that this material binds to
+	v_ranges: [dynamic]IndexRange,
+	vt_ranges: [dynamic]IndexRange,
+	vn_ranges: [dynamic]IndexRange,
+}
+
+delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
+	delete(mtl.v_ranges)
+	delete(mtl.vt_ranges)
+	delete(mtl.vn_ranges)
+}
+
+DEFAULT_MATERIAL :: WavefrontMaterial {
+	name = "__SCOP_DEFAULT_MATERIAL",
+
+	Ka = {1.0, 1.0, 1.0},
+	Kd = {1.0, 1.0, 1.0},
+}
+
+WavefrontObjFile :: struct {
 	vert_positions:	[dynamic]Vec3f,
 	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
 	normals:	[dynamic]Vec3f,
@@ -29,14 +88,14 @@ ObjFileData :: struct {
 	vertex_indices:	[dynamic]ObjFileVertexIndices,
 }
 
-delete_ObjFileData :: proc(data: ObjFileData) {
+delete_ObjFileData :: proc(data: WavefrontObjFile) {
 	delete(data.vert_positions)
 	delete(data.tex_coords)
 	delete(data.normals)
 	delete(data.vertex_indices)
 }
-
-parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
+@(private="file")
+parse_vertex :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -46,8 +105,8 @@ parse_vertex :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	append(&obj_data.vert_positions, vertex)
 	return true
 }
-
-parse_vertex_texture :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
+@(private="file")
+parse_vertex_texture :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	assert(len(split_str) >= 1)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -57,8 +116,8 @@ parse_vertex_texture :: proc(obj_data: ^ObjFileData, split_str: []string) -> boo
 	append(&obj_data.tex_coords, vertex)
 	return true
 }
-
-parse_vertex_normal :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
+@(private="file")
+parse_vertex_normal :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -72,7 +131,8 @@ parse_vertex_normal :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool
 // Use this very simple algorithm to decompose a 4+ indices polygon into triangles
 // https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
 // https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
-parse_easy_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
+@(private="file")
+parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -93,7 +153,8 @@ parse_easy_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 	return true
 }
 
-parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
+@(private="file")
+parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	assert(len(split_str) >= 3)
 	// For each vertex, parse index data (v/vt/vn). UVs and normals are optional
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -140,11 +201,82 @@ parse_hard_face :: proc(obj_data: ^ObjFileData, split_str: []string) -> bool {
 
 }
 
+@(private="file")
+parse_vec3 :: proc(split_str: []string, output: ^Vec3f) -> (ok: bool) {
+	if len(split_str) < 3 {
+		return
+	}
+	output.x = strconv.parse_f32(split_str[0]) or_return
+	output.y = strconv.parse_f32(split_str[1]) or_return
+	output.z = strconv.parse_f32(split_str[2]) or_return
+	ok = true
+	return
+}
+
+@(private="file")
+parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
+	if len(split_str) < 2 {
+		return
+	}
+	output.x = strconv.parse_f32(split_str[0]) or_return
+	output.y = strconv.parse_f32(split_str[1]) or_return
+	ok = true
+	return
+}
+
+parse_mtl_file :: proc(mtl_file_path: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
+	using virtual.Map_File_Flag
+	file_contents, err := virtual.map_file_from_path(mtl_file_path, {.Read})
+	if err != nil {
+		fmt.printfln("Error mapping `%v`: %v", mtl_file_path, err)
+		return
+	}
+	defer virtual.release(raw_data(file_contents), len(file_contents))
+
+	materials[DEFAULT_MATERIAL.name] = DEFAULT_MATERIAL
+	active_material_name := DEFAULT_MATERIAL.name
+
+	// Iterate over every line of the .mtl file
+	it := string(file_contents)
+	for line in strings.split_lines_iterator(&it) {
+		// Slice away everything after the #
+		hash_index := strings.index_byte(line, '#')
+		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
+		if (len(to_parse) == 0) {
+			continue
+		}
+
+		split_line := strings.fields(to_parse, context.temp_allocator)
+		// defer free_all(context.temp_allocator)
+
+		active_material : ^WavefrontMaterial = &materials[active_material_name]
+		assert(active_material_name in materials)
+
+		switch split_line[0] {
+		case "newmtl":
+			active_material_name = split_line[1]
+			new_material := DEFAULT_MATERIAL
+			new_material.name = active_material_name
+			materials[active_material_name] = new_material
+		case "Ka":
+			parse_vec3(split_line[1:], &active_material.Ka) or_return
+		case "Kd":
+			parse_vec3(split_line[1:], &active_material.Kd) or_return
+		case "Ks":
+			parse_vec3(split_line[1:], &active_material.Ks) or_return
+		case: // default
+			fmt.println("Unrecognized line:", to_parse)
+		}
+	}
+	ok = true
+	return
+}
+
 // TODO: Handle more complex face definitions
 // TODO: Define a behaviour when .obj does not define some stuff like UVs or normals
 //       so I can include all of these in the EBO regardless of .obj format
 // TODO: .mtl support somewhere?
-parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: bool) {
+parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
 	using virtual.Map_File_Flag
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
@@ -153,6 +285,12 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))
 
+	materials = map[string]WavefrontMaterial{
+		DEFAULT_MATERIAL.name = DEFAULT_MATERIAL
+	}
+	active_material_name := string(DEFAULT_MATERIAL.name)
+
+	v_range, vt_range, vn_range: IndexRange
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
 		hash_index := strings.index_byte(line, '#')
@@ -164,33 +302,57 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: ObjFileData, ok: boo
 		split_line := strings.fields(to_parse, context.temp_allocator)
 		defer free_all(context.temp_allocator)
 
+		active_material : ^WavefrontMaterial = &materials[active_material_name]
+
 		switch split_line[0] {
 		case "v":
 			parse_vertex(&obj_data, split_line[1:]) or_return
+			v_range.end += 1
 		case "vt":
 			parse_vertex_texture(&obj_data, split_line[1:]) or_return
+			vt_range.end += 1
 		case "vn":
 			parse_vertex_normal(&obj_data, split_line[1:]) or_return
+			vn_range.end += 1
 		case "f":
 			if strings.contains_rune(to_parse, '/') {
 				parse_hard_face(&obj_data, split_line[1:]) or_return
 			} else {
 				parse_easy_face(&obj_data, split_line[1:]) or_return
 			}
+		case "mtllib":
+			delete(materials)
+			materials = parse_mtl_file(split_line[1]) or_return
+		case "usemtl":
+			// XXX: If faces are also supposed to be affected by the material, we'll need to rework
+			// this part, probably by also tracking the face index.
+			// Append currently active indices range to material's bound ranges
+			append(&active_material.v_ranges, v_range)
+			append(&active_material.vt_ranges, vt_range)
+			append(&active_material.vn_ranges, vn_range)
+
+			// XXX: I could make it so it only stored the name of the material and tries to
+			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
+			// but that might be overkill/beyond the Wavefront spec
+			if !(split_line[1] in materials) do return
+			active_material_name = split_line[1]
+			active_material = &materials[active_material_name]
+
+			// Reset the active range to these new indices
+			// TODO: Could also just do begin = end?
+			v_range.begin = u32(len(obj_data.vert_positions))
+			vt_range.begin = u32(len(obj_data.tex_coords))
+			vn_range.begin = u32(len(obj_data.normals))
+			v_range.end = v_range.begin
+			vt_range.end = vt_range.begin
+			vn_range.end = vn_range.begin
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)
 		}
 	}
 
-	// assert(len(obj_data.face_texture_idx) == len(obj_data.face_normal_idx))
-	// fmt.println(len(obj_data.vertices), len(obj_data.tex_coords))
-	// assert(len(obj_data.vertices) == len(obj_data.tex_coords))
-	// assert(len(obj_data.normals) == len(obj_data.tex_coords))
-
 	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices",
 		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices))
-	// fmt.printfln("=== Vertex indices: %v\n=== UV indices: %v\n=== Normal indices: %v",
-	// 	len(obj_data.face_vertex_idx), len(obj_data.face_texture_idx), len(obj_data.face_normal_idx))
 
 	max: [2]f32
 	for i in 0..<len(obj_data.tex_coords) {

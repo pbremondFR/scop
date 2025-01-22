@@ -107,7 +107,7 @@ VertexData :: struct #packed {
 
 @(private="file")
 append_vertex_in_vertex_buffer :: proc(
-	obj_data: ^ObjFileData,
+	obj_data: ^WavefrontObjFile,
 	vertex_buffer: ^[dynamic]VertexData,
 	vertex_id: ObjFileVertexIndices)
 {
@@ -144,7 +144,7 @@ append_vertex_in_vertex_buffer :: proc(
  * used by OpenGL to draw them.
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
-obj_data_to_vertex_buffer :: proc(obj_data: ^ObjFileData) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
+obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 	vertex_buffer := make([dynamic]VertexData)
 	index_buffer := make([dynamic]u32)
 
