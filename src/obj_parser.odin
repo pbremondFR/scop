@@ -22,7 +22,7 @@ WavefrontVertexID :: struct {
 	material: string,
 }
 
-IlluminationModel :: enum {
+IlluminationModel :: enum u32 {
 	ColorOnAmbientOff,
 	ColorOnAmbientOn,
 	HightlightOn,
@@ -237,6 +237,7 @@ parse_mtl_file :: proc(mtl_file_path: string) -> (materials: map[string]Wavefron
 		// Slice away everything after the #
 		hash_index := strings.index_byte(line, '#')
 		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
+		to_parse = strings.trim_space(to_parse)
 		if (len(to_parse) == 0) {
 			continue
 		}
@@ -266,6 +267,8 @@ parse_mtl_file :: proc(mtl_file_path: string) -> (materials: map[string]Wavefron
 	ok = true
 	return
 }
+
+MAX_MATERIALS :: 128
 
 // TODO: Handle more complex face definitions
 // TODO: Define a behaviour when .obj does not define some stuff like UVs or normals
@@ -298,8 +301,6 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		split_line := strings.fields(to_parse, context.temp_allocator)
 		defer free_all(context.temp_allocator)
 
-		active_material : ^WavefrontMaterial = &materials[active_material_name]
-
 		switch split_line[0] {
 		case "v":
 			parse_vertex(&obj_data, split_line[1:]) or_return
@@ -325,7 +326,6 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			// FIXME: This memory will be freed by the "free_all(temp_allocator)" call, right?
 			// Use after free?
 			active_material_name = split_line[1]
-			active_material = &materials[active_material_name]
 
 			// Reset the active range to these new indices
 			// TODO: Could also just do begin = end?
@@ -341,17 +341,11 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices",
 		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices))
 
-	max: [2]f32
-	for i in 0..<len(obj_data.tex_coords) {
-	// for vt in obj_data.tex_coords {
-		vt := obj_data.tex_coords[i]
-		error_message := fmt.aprintfln("Error at vt %v", i)
-		// assert(vt.x >= 0 && vt.x <= 1 && vt.y >= 0 && vt.y <= 1, error_message)
-		if vt.x > max.x do max.x = vt.x
-		if vt.y > max.y do max.y = vt.y
-		delete(error_message)
+	if len(materials) > MAX_MATERIALS {
+		// Print limit as MAX_MATERIALS - 1 because there is always our own default material
+		fmt.printfln("Error: Too many materials! Limit is %v", MAX_MATERIALS - 1)
+		return
 	}
-	fmt.printfln("Max VT: %v", max)
 
 	ok = true
 	return

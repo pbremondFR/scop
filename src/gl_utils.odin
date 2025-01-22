@@ -3,6 +3,7 @@ package main
 import "core:os"
 import "core:fmt"
 import "core:math"
+import "core:slice"
 import gl "vendor:OpenGL"
 import clang "core:c"
 
@@ -159,6 +160,10 @@ materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []Wav
 		output_array[i] = material
 		i += 1
 	}
+	compare := proc(a, b: WavefrontMaterial) -> bool {
+		return a.name < b.name
+	}
+	slice.sort_by(output_array, compare)
 	return output_array
 }
 
@@ -167,13 +172,9 @@ materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []Wav
  * used by OpenGL to draw them.
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
-obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
+obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []WavefrontMaterial) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
 	vertex_buffer := make([dynamic]VertexData)
 	index_buffer := make([dynamic]u32)
-
-	// Store materials in array so we can iterate over it faster when looking for an index
-	materials_array := materials_map_to_array(materials)
-	defer delete(materials_array)
 
 	/*
 	 * Preface/REMINDER: A VERTEX IS NOT JUST A POSITION. The vertex's position is only one of its ATTRIBUTES.
@@ -199,7 +200,7 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[st
 			// This vertex is still unique, insert it
 			vertex_index := u32(len(vertex_buffer))
 			vertex_ebo_locations[vertex_identity] = vertex_index
-			append_vertex_in_vertex_buffer(obj_data, materials_array, &vertex_buffer, vertex_identity)
+			append_vertex_in_vertex_buffer(obj_data, materials, &vertex_buffer, vertex_identity)
 			append(&index_buffer, vertex_index)
 		}
 		else {
@@ -210,4 +211,39 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[st
 	}
 
 	return vertex_buffer[:], index_buffer[:]
+}
+
+// XXX: Had to reorder members & add in some padding members to be compliant with
+// GLSL std140 layout
+MaterialData :: struct #packed {
+	Ka: Vec3f "Ambient color",
+_pad1: f32,
+	Kd: Vec3f "Diffuse color",
+_pad2: f32,
+	Ks: Vec3f "Specular color",
+_pad3: f32,
+	// TESTME: I think #align(4) will fuck things up with std140 here
+	Tf: Vec3f "Transmission filter color",
+_pad4: f32,
+	Ns: f32 "Specular exponent",
+	Tr: f32 "Transparency", // Also known as "d" (disolve)
+	Ni: f32 "Index of refraction",
+	illum: IlluminationModel "Illumination model",
+}
+
+wavefront_materials_to_uniform_buffer :: proc(materials: []WavefrontMaterial) -> []MaterialData {
+	gl_buffer := make([]MaterialData, len(materials))
+	for material, idx in materials {
+		gl_buffer[idx] = MaterialData{
+			Ka = material.Ka,
+			Kd = material.Kd,
+			Ks = material.Ks,
+			Ns = material.Ns,
+			Tr = material.Tr,
+			Tf = material.Tf,
+			Ni = material.Ni,
+			illum = material.illum,
+		}
+	}
+	return gl_buffer
 }

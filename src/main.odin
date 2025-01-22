@@ -211,7 +211,12 @@ main :: proc() {
 
 	gl.BindVertexArray(vao)
 
-	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials)
+	materials_array := materials_map_to_array(materials)
+	defer delete(materials_array)
+	for m, idx in materials_array {
+		fmt.printfln("Material %v (%v):\tKa: %v", m.name, idx, m.Ka)
+	}
+	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials_array)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
@@ -242,6 +247,17 @@ main :: proc() {
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
+
+	// === MATERIALS UNIFORM BUFFER ===
+	ubo: u32
+	gl.GenBuffers(1, &ubo)
+	gl.BindBuffer(gl.UNIFORM_BUFFER, ubo)
+	uniform_buffer_data := wavefront_materials_to_uniform_buffer(materials_array)
+	gl.BufferData(gl.UNIFORM_BUFFER, len(uniform_buffer_data) * size_of(uniform_buffer_data[0]),
+		raw_data(uniform_buffer_data), gl.STATIC_DRAW)
+	gl.BindBuffer(gl.UNIFORM_BUFFER, 0)
+	delete(uniform_buffer_data)
+	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
 
 	// === TEXTURES ===
 	texture, texture_ok := get_gl_texture("resources/monki.bmp")
