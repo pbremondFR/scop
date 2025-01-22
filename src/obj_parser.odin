@@ -69,6 +69,8 @@ DEFAULT_MATERIAL :: WavefrontMaterial {
 
 	Ka = {1.0, 1.0, 1.0},
 	Kd = {1.0, 1.0, 1.0},
+	Ks = {1.0, 1.0, 1.0},
+	Ns = 500,
 }
 
 WavefrontObjFile :: struct {

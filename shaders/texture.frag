@@ -17,6 +17,7 @@ layout(std140, binding = 0) uniform uMaterials{
 
 uniform vec3 light_pos;
 uniform vec3 light_color;
+uniform vec3 view_pos;
 uniform sampler2D ourTexture;
 
 in vec4 Pos;
@@ -34,15 +35,25 @@ void main()
 	vec3 ambient = ambient_color * vec3(0.2, 0.2, 0.2);
 
 	// Diffuse lighting
-	// TODO: Integrate diffuse color from material
+	vec3 diffuse_color = materials[MtlID].Kd;
 	vec3 norm = normalize(Normal);
 	vec3 lightDir = normalize(light_pos - FragPos);
 	float diff = max(dot(norm, lightDir), 0.0);
 	vec3 diffuse = diff * light_color;
 
-	vec4 texture_color = texture(ourTexture,  Uv);
+	// Specular lighting
+	// FIXME: Problems with camera angles make secular lighting weird
+	vec3 spec_color = materials[MtlID].Ks;
+	float spec_exponent = materials[MtlID].Ns;
+	vec3 viewDir = normalize(view_pos - FragPos);
+	vec3 reflectDir = reflect(-lightDir, norm);
+	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
+	vec3 specular = spec * light_color * spec_color;
 
-	// FIXME: Shading stays fixed when model rotates
-	vec3 final_color = (ambient + diffuse) * texture_color.xyz;
+	// Texture color
+	vec4 texture_color = texture(ourTexture, Uv);
+	// vec4 texture_color = vec4(ambient_color, 1);
+
+	vec3 final_color = (ambient + diffuse + specular) * texture_color.xyz;
 	FragColor = vec4(final_color, 1.0);
 }

@@ -323,6 +323,8 @@ main :: proc() {
 		set_shader_uniform(shader_programs[state.shader_program], "projection", &proj_matrix)
 		set_shader_uniform(shader_programs[state.shader_program], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[state.shader_program], "light_color", &Vec3f{1, 1, 1})
+		cam_pos := state.player_cam[3].xyz
+		set_shader_uniform(shader_programs[state.shader_program], "view_pos", &cam_pos)
 
 		gl.BindVertexArray(vao)
 		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
