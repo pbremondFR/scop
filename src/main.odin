@@ -57,6 +57,7 @@ ShaderProgram :: enum {
 	FaceNormals,
 	VertNormals,
 	Texture,
+	LightSource,
 }
 
 State :: struct {
@@ -65,6 +66,7 @@ State :: struct {
 	dt: f64,
 	glfw_inputs: map[i32]bool,
 	player_cam: Mat4f,
+	light_source_pos: Vec3f,
 	enable_model_spin: bool,
 	shader_program: ShaderProgram,
 }
@@ -185,18 +187,22 @@ main :: proc() {
 	model_offset := get_model_offset_matrix(obj_data)
 	init_camera_pos := get_initial_camera_pos(obj_data)
 	state.player_cam[3] = Vec4f{init_camera_pos.x, init_camera_pos.y, init_camera_pos.z, 1.0}
+	state.light_source_pos = model_offset[3].xyz
+	state.light_source_pos.z *= 2
+	state.light_source_pos.y = -state.light_source_pos.z
 
 	// ===== SHADERS =====
 	shader_programs := [ShaderProgram]u32 {
 		.FaceNormals = get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
 		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
 		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
+		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
-	if shader_programs[.FaceNormals] == 0 || shader_programs[.VertNormals] == 0 \
-		|| shader_programs[.Texture] == 0
-	{
-		fmt.printfln("Error creating shaders")
-		return
+	for program in shader_programs {
+		if program == 0 {
+			fmt.println("Error creating shaders")
+			return
+		}
 	}
 	defer {
 		for id in shader_programs do gl.DeleteProgram(id)
@@ -232,9 +238,6 @@ main :: proc() {
 	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
 	gl.EnableVertexAttribArray(1)
 
-	assert(offset_of(VertexData, uv) == 12)
-	assert(offset_of(VertexData, material_idx) == 20)
-	assert(offset_of(VertexData, norm) == 24)
 	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(vertex_buffer[0]), offset_of(VertexData, material_idx))
 	gl.EnableVertexAttribArray(2)
 
@@ -249,6 +252,13 @@ main :: proc() {
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
+
+	light_vao, light_vbo := create_light_source()
+	assert(light_vao != 0 && light_vbo != 0)
+	defer {
+		gl.DeleteVertexArrays(1, &light_vao)
+		gl.DeleteBuffers(1, &light_vbo)
+	}
 
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo: u32
@@ -308,17 +318,25 @@ main :: proc() {
 		view_matrix := state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
-		model_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "model")
-		gl.UniformMatrix4fv(model_loc, 1, gl.FALSE, &model_matrix[0, 0])
-
-		view_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "view")
-		gl.UniformMatrix4fv(view_loc, 1, gl.FALSE, &view_matrix[0, 0])
-
-		proj_loc := gl.GetUniformLocation(shader_programs[state.shader_program], "projection")
-		gl.UniformMatrix4fv(proj_loc, 1, gl.FALSE, &proj_matrix[0, 0])
+		set_shader_uniform(shader_programs[state.shader_program], "model", &model_matrix)
+		set_shader_uniform(shader_programs[state.shader_program], "view", &view_matrix)
+		set_shader_uniform(shader_programs[state.shader_program], "projection", &proj_matrix)
+		set_shader_uniform(shader_programs[state.shader_program], "light_pos", &state.light_source_pos)
+		set_shader_uniform(shader_programs[state.shader_program], "light_color", &Vec3f{1, 1, 1})
 
 		gl.BindVertexArray(vao)
 		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
+
+		// === DRAW LIGHT CUBE ===
+		gl.UseProgram(shader_programs[.LightSource])
+
+		set_shader_uniform(shader_programs[.LightSource], "light_pos", &state.light_source_pos)
+		set_shader_uniform(shader_programs[.LightSource], "light_color", &Vec3f{1, 1, 1})
+		set_shader_uniform(shader_programs[.LightSource], "view", &view_matrix)
+		set_shader_uniform(shader_programs[.LightSource], "projection", &proj_matrix)
+
+		gl.BindVertexArray(light_vao)
+		gl.DrawArrays(gl.TRIANGLES, 0, 36)
 
 		glfw.SwapBuffers(window)
 	}
@@ -356,6 +374,79 @@ get_model_offset_matrix :: proc(model: WavefrontObjFile) -> Mat4f {
 	offset_mat[3][1] = offset_vec.y
 	offset_mat[3][2] = offset_vec.z
 	return offset_mat
+}
+
+get_light_cube_model_matrix :: proc(main_obj_model: WavefrontObjFile) -> (cube_model_matrix: Mat4f) {
+	light_pos := get_initial_camera_pos(main_obj_model)
+	light_pos.z *= 2
+	light_pos.y = light_pos.z
+
+	cube_model_matrix = UNIT_MAT4F
+	cube_model_matrix[3][1] = -light_pos.y
+	cube_model_matrix[3][2] = light_pos.z
+	return
+}
+
+create_light_source :: proc() -> (light_vao, light_vbo: u32) {
+	cube_vertices := [?]f32{
+        -0.5, -0.5, -0.5,
+         0.5, -0.5, -0.5,
+         0.5,  0.5, -0.5,
+         0.5,  0.5, -0.5,
+        -0.5,  0.5, -0.5,
+        -0.5, -0.5, -0.5,
+
+        -0.5, -0.5,  0.5,
+         0.5, -0.5,  0.5,
+         0.5,  0.5,  0.5,
+         0.5,  0.5,  0.5,
+        -0.5,  0.5,  0.5,
+        -0.5, -0.5,  0.5,
+
+        -0.5,  0.5,  0.5,
+        -0.5,  0.5, -0.5,
+        -0.5, -0.5, -0.5,
+        -0.5, -0.5, -0.5,
+        -0.5, -0.5,  0.5,
+        -0.5,  0.5,  0.5,
+
+         0.5,  0.5,  0.5,
+         0.5,  0.5, -0.5,
+         0.5, -0.5, -0.5,
+         0.5, -0.5, -0.5,
+         0.5, -0.5,  0.5,
+         0.5,  0.5,  0.5,
+
+        -0.5, -0.5, -0.5,
+         0.5, -0.5, -0.5,
+         0.5, -0.5,  0.5,
+         0.5, -0.5,  0.5,
+        -0.5, -0.5,  0.5,
+        -0.5, -0.5, -0.5,
+
+        -0.5,  0.5, -0.5,
+         0.5,  0.5, -0.5,
+         0.5,  0.5,  0.5,
+         0.5,  0.5,  0.5,
+        -0.5,  0.5,  0.5,
+        -0.5,  0.5, -0.5,
+    };
+
+	// TODO: Error checking?
+	gl.GenBuffers(1, &light_vbo)
+	gl.BindBuffer(gl.ARRAY_BUFFER, light_vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, len(cube_vertices) * size_of(cube_vertices[0]),
+		raw_data(cube_vertices[:]), gl.STATIC_DRAW)
+
+	gl.GenVertexArrays(1, &light_vao)
+	gl.BindVertexArray(light_vao)
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0)
+	gl.EnableVertexAttribArray(0)
+
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+	gl.BindVertexArray(0)
+
+	return
 }
 
 // TODO: Gimball lock world-coordinates roll so we don't roll our virtual head? Like in FPS games
@@ -443,6 +534,10 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	}
 	else if key == glfw.KEY_R && action == glfw.PRESS {
 		state.enable_model_spin = !state.enable_model_spin
+	}
+	else if key == glfw.KEY_F && action == glfw.PRESS {
+		// FIXME: Doesn't work
+		state.light_source_pos = state.player_cam[3].xyz
 	}
 	else if (key >= glfw.KEY_1 && key <= glfw.KEY_3) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)

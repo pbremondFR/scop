@@ -4,6 +4,7 @@ import "core:os"
 import "core:fmt"
 import "core:math"
 import "core:slice"
+import "core:strings"
 import gl "vendor:OpenGL"
 import clang "core:c"
 
@@ -240,4 +241,20 @@ wavefront_materials_to_uniform_buffer :: proc(materials: []WavefrontMaterial) ->
 		}
 	}
 	return gl_buffer
+}
+
+set_shader_uniform :: proc{
+	set_shader_uniform_mat4f,
+	set_shader_uniform_vec3f,
+}
+
+set_shader_uniform_mat4f :: proc(shader_program: u32, uniform_name: string, mat: ^Mat4f) {
+	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
+	// gl.UniformMatrix4fv(uniform_location, 1, gl.FALSE, &mat[0, 0])
+	gl.UniformMatrix4fv(uniform_location, 1, gl.FALSE, raw_data(mat))
+}
+
+set_shader_uniform_vec3f :: proc(shader_program: u32, uniform_name: string, vec: ^Vec3f) {
+	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
+	gl.Uniform3fv(uniform_location, 1, raw_data(vec))
 }

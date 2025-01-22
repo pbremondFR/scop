@@ -12,14 +12,19 @@ out vec4 Pos;
 out vec2 Uv;
 out uint MtlID;
 out vec3 Normal;
+out vec3 FragPos;
 
 void main()
 {
-	gl_Position = projection * view * model * vec4(aPos, 1.0);
+	FragPos = vec3(model * vec4(aPos, 1.0));
+
 	Pos = vec4(aPos, 1.0);
-	// I'm never gonna use 3D textures, so from here on vec3 texture coordinates
-	// are becoming vec2: just UV coordinates, no W information
-	Uv = aUv.xy;
+	Uv = aUv;
 	MtlID = aMaterial;
 	Normal = aNormal;
+	// Calculate the normal matrix
+	// TODO: Transfer this to the CPU and pass it through a uniform
+	Normal = mat3(transpose(inverse(model))) * aNormal;
+	gl_Position = projection * view * vec4(FragPos, 1.0);
+
 }
