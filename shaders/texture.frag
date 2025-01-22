@@ -19,18 +19,18 @@ uniform sampler2D ourTexture;
 
 in vec4 Pos;
 in vec2 Uv;
-flat in uint Material;
+flat in uint MtlID;
 in vec3 Normal;
 
 out vec4 FragColor;
 
 void main()
 {
-	// FragColor = texture(ourTexture, Uv);
-	FragColor = vec4(materials[Material].Ka, 1.0);
-	// FragColor = vec4(Material / 6.0, Material / 6.0, Material / 6.0, 1.0);
-	float tr = materials[Material].Tr;
-	FragColor = vec4(tr, tr, tr, 1.0);
-	int illum = materials[Material].illum;
-	FragColor = vec4(illum / 10.0, illum / 10.0, illum / 10.0, 1.0);
+	vec3 ambient_lighting = vec3(0.2, 0.2, 0.2);
+	vec3 ambient_color = materials[MtlID].Ka;
+
+	vec4 texture_color = texture(ourTexture,  Uv);
+
+	vec3 final_color = ambient_color * ambient_lighting * texture_color.xyz;
+	FragColor = vec4(final_color, 1.0);
 }

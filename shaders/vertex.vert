@@ -10,7 +10,7 @@ uniform mat4 projection;
 
 out vec4 Pos;
 out vec2 Uv;
-out uint Material;
+out uint MtlID;
 out vec3 Normal;
 
 void main()
@@ -20,6 +20,6 @@ void main()
 	// I'm never gonna use 3D textures, so from here on vec3 texture coordinates
 	// are becoming vec2: just UV coordinates, no W information
 	Uv = aUv.xy;
-	Material = aMaterial;
+	MtlID = aMaterial;
 	Normal = aNormal;
 }

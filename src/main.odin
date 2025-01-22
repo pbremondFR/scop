@@ -260,8 +260,8 @@ main :: proc() {
 	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
 
 	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/monki.bmp")
-	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
+	// texture, texture_ok := get_gl_texture("resources/monki.bmp")
+	texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
 		return
