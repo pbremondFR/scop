@@ -45,7 +45,6 @@ void main()
 	vec3 diffuse = diff * diffuse_color * light_color;
 
 	// Specular lighting
-	// FIXME: Problems with camera angles make specular lighting weird
 	vec3 spec_color = materials[MtlID].Ks;
 	float spec_exponent = materials[MtlID].Ns;
 	vec3 viewDir = normalize(view_pos - FragPos);

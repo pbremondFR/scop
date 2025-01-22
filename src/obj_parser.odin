@@ -279,9 +279,6 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 MAX_MATERIALS :: 128
 
 // TODO: Handle more complex face definitions
-// TODO: Define a behaviour when .obj does not define some stuff like UVs or normals
-//       so I can include all of these in the EBO regardless of .obj format
-// TODO: .mtl support somewhere?
 parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
 	using virtual.Map_File_Flag
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})

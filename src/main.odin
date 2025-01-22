@@ -161,17 +161,18 @@ main :: proc() {
 	gl.load_up_to(int(GL_MAJOR_VERSION), GL_MINOR_VERSION, glfw.gl_set_proc_address)
 
 	// Get desired .obj file from program arguments. main() doesn't take args,
-	// it's nore like in Python with os.args
+	// it's more like in Python with os.args
 	file_path := os.args[1]
 	obj_data, materials, obj_ok := parse_obj_file(file_path)
+	// XXX: These defer calls are fine even in case of error
+	defer {
+		delete_ObjFileData(obj_data)
+		for ley, &mtl in materials do delete_WavefrontMaterial(mtl)
+		delete(materials)
+	}
 	if !obj_ok {
 		fmt.printfln("Failed to load `%v`", file_path)
 		return
-	}
-	defer delete_ObjFileData(obj_data)
-	defer {
-		for ley, &mtl in materials do delete_WavefrontMaterial(mtl)
-		delete(materials)
 	}
 
 	for key, &mtl in materials {

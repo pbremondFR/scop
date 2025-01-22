@@ -133,7 +133,7 @@ append_vertex_in_vertex_buffer :: proc(
 	 */
 	if vertex_id.uv_idx == clang.UINT32_MAX {
 		new_idx := u32(len(obj_data.tex_coords))
-		append(&obj_data.tex_coords, [3]f32{0, 0, 0})
+		append(&obj_data.tex_coords, obj_data.vert_positions[vertex_id.pos_idx])
 		vertex_id.uv_idx = new_idx
 	}
 	if vertex_id.norm_idx == clang.UINT32_MAX {
