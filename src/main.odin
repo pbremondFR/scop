@@ -167,6 +167,7 @@ main :: proc() {
 	// XXX: These defer calls are fine even in case of error
 	defer {
 		delete_ObjFileData(obj_data)
+		// NOTE: No-op for now
 		for ley, &mtl in materials do delete_WavefrontMaterial(mtl)
 		delete(materials)
 	}
@@ -449,7 +450,6 @@ process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}
 	look: Vec3f = {0, 0, 0}
 	fov_delta: f32 = 0
-	pitch, yaw: f32
 
 	PITCH_LIMIT :: 1.55334
 
@@ -479,15 +479,19 @@ process_player_movements :: proc() {
 		look *= f32(state.dt) * PLAYER_ROTATION_SPEED
 	}
 
-	pitch = look.y
-	yaw = look.x
+	pitch := look.y
+	yaw := look.x
 
-	state.camera.pos += movement * Mat3f(state.camera.mat)
+	// Clamp pitch to a limit, like in FPS games
 	state.camera.pitch = math.clamp(state.camera.pitch + pitch, -PITCH_LIMIT, PITCH_LIMIT)
 	state.camera.yaw += yaw
 
-	state.camera.mat = get_camera_matrix(state.camera.pos, state.camera.pitch, state.camera.yaw)
+	// Stabilize movement vector on horizontal plane
+	upwards_camera := get_rotation_matrix4_x_axis(-state.camera.pitch) * state.camera.mat
+	state.camera.pos += movement * Mat3f(upwards_camera)
 
+	// Apply camera matrix transformation
+	state.camera.mat = get_camera_matrix(state.camera.pos, state.camera.pitch, state.camera.yaw)
 	state.fov += fov_delta * f32(state.dt) * PLAYER_FOV_SPEED
 }
 

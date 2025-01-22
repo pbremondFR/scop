@@ -61,7 +61,6 @@ WavefrontMaterial :: struct {
 
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
-	// delete(mtl.vertex_ranges)
 }
 
 DEFAULT_MATERIAL :: WavefrontMaterial {
