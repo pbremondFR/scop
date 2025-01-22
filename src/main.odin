@@ -183,7 +183,7 @@ main :: proc() {
 	model_offset := get_model_offset_matrix(obj_data)
 	state.camera.pos = get_initial_camera_pos(obj_data)
 	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
-	state.light_source_pos = model_offset[3].xyz
+	state.light_source_pos = state.camera.pos
 	state.light_source_pos.z *= 2
 	state.light_source_pos.y = -state.light_source_pos.z
 
@@ -523,7 +523,6 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		state.enable_model_spin = !state.enable_model_spin
 	}
 	else if key == glfw.KEY_F && action == glfw.PRESS {
-		// FIXME: Doesn't work
 		state.light_source_pos = -state.camera.pos
 	}
 	else if (key >= glfw.KEY_1 && key <= glfw.KEY_3) && action == glfw.PRESS {
