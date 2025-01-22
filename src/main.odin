@@ -183,6 +183,8 @@ main :: proc() {
 	}
 
 	model_offset := get_model_offset_matrix(obj_data)
+	init_camera_pos := get_initial_camera_pos(obj_data)
+	state.player_cam[3] = Vec4f{init_camera_pos.x, init_camera_pos.y, init_camera_pos.z, 1.0}
 
 	// ===== SHADERS =====
 	shader_programs := [ShaderProgram]u32 {
@@ -321,6 +323,21 @@ main :: proc() {
 		glfw.SwapBuffers(window)
 	}
 
+}
+
+get_initial_camera_pos :: proc(model: WavefrontObjFile) -> Vec3f {
+	// Get bounding box around model
+	min, max: Vec3f
+	for v in model.vert_positions {
+		for i in 0..<3 {
+			if v[i] < min[i] do min[i] = v[i]
+			if v[i] > max[i] do max[i] = v[i]
+		}
+	}
+
+	// Good approximation of camera spacing around object. We don't need something ultra precise.
+	offset := f32(linalg.length((max - min).xz)) * 1
+	return {0.0, 0.0, -offset}
 }
 
 get_model_offset_matrix :: proc(model: WavefrontObjFile) -> Mat4f {
