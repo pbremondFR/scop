@@ -65,7 +65,8 @@ State :: struct {
 	fov: f32,
 	dt: f64,
 	glfw_inputs: map[i32]bool,
-	player_cam: Mat4f,
+	// player_cam: Mat4f,
+	camera: PlayerCamera,
 	light_source_pos: Vec3f,
 	enable_model_spin: bool,
 	shader_program: ShaderProgram,
@@ -74,13 +75,6 @@ State :: struct {
 state := State{
 	window_size = {1024, 1024},
 	fov = math.to_radians_f32(70.0),
-	// TODO: Initialize player camera to a position that adapts to the object's size
-	player_cam = {
-		1.0, 0.0, 0.0, 0.0,
-		0.0, 1.0, 0.0, 0.0,
-		0.0, 0.0, 1.0, -15.0,
-		0.0, 0.0, 0.0, 1.0,
-	},
 	shader_program = .FaceNormals,
 }
 
@@ -185,8 +179,8 @@ main :: proc() {
 	}
 
 	model_offset := get_model_offset_matrix(obj_data)
-	init_camera_pos := get_initial_camera_pos(obj_data)
-	state.player_cam[3] = Vec4f{init_camera_pos.x, init_camera_pos.y, init_camera_pos.z, 1.0}
+	state.camera.pos = get_initial_camera_pos(obj_data)
+	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
 	state.light_source_pos = model_offset[3].xyz
 	state.light_source_pos.z *= 2
 	state.light_source_pos.y = -state.light_source_pos.z
@@ -315,16 +309,14 @@ main :: proc() {
 			time_accum += state.dt
 		}
 		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * model_offset
-		view_matrix := state.player_cam
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
 
 		set_shader_uniform(shader_programs[state.shader_program], "model", &model_matrix)
-		set_shader_uniform(shader_programs[state.shader_program], "view", &view_matrix)
+		set_shader_uniform(shader_programs[state.shader_program], "view", &state.camera.mat)
 		set_shader_uniform(shader_programs[state.shader_program], "projection", &proj_matrix)
 		set_shader_uniform(shader_programs[state.shader_program], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[state.shader_program], "light_color", &Vec3f{1, 1, 1})
-		cam_pos := state.player_cam[3].xyz
-		set_shader_uniform(shader_programs[state.shader_program], "view_pos", &cam_pos)
+		set_shader_uniform(shader_programs[state.shader_program], "view_pos", &state.camera.pos)
 
 		gl.BindVertexArray(vao)
 		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
@@ -334,7 +326,7 @@ main :: proc() {
 
 		set_shader_uniform(shader_programs[.LightSource], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[.LightSource], "light_color", &Vec3f{1, 1, 1})
-		set_shader_uniform(shader_programs[.LightSource], "view", &view_matrix)
+		set_shader_uniform(shader_programs[.LightSource], "view", &state.camera.mat)
 		set_shader_uniform(shader_programs[.LightSource], "projection", &proj_matrix)
 
 		gl.BindVertexArray(light_vao)
@@ -456,7 +448,9 @@ process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}
 	look: Vec3f = {0, 0, 0}
 	fov_delta: f32 = 0
-	pitch, yaw, roll: f32
+	pitch, yaw: f32
+
+	PITCH_LIMIT :: 1.55334
 
 	if state.glfw_inputs[glfw.KEY_W]			do movement.z += 1
 	if state.glfw_inputs[glfw.KEY_S]			do movement.z -= 1
@@ -486,27 +480,13 @@ process_player_movements :: proc() {
 
 	pitch = look.y
 	yaw = look.x
-	roll = look.z
 
-	movement_mat := UNIT_MAT4F
-	// XXX: CAREFUL WITH THE WAY YOU INDEX MATRICES IN ODIN!
-	// These two was are equivalent!!!
-	// First one is in column-major order, second in row-major
-	// I guess because first one is on the programming side while second one is similar to math notation...
-	// movement_mat[3][0] = movement.x
-	// movement_mat[3][1] = movement.y
-	// movement_mat[3][2] = movement.z
-	movement_mat[0, 3] = movement.x
-	movement_mat[1, 3] = movement.y
-	movement_mat[2, 3] = movement.z
+	state.camera.pos += movement * Mat3f(state.camera.mat)
+	state.camera.pitch = math.clamp(state.camera.pitch + pitch, -PITCH_LIMIT, PITCH_LIMIT)
+	state.camera.yaw += yaw
 
-	pitch_mat := get_rotation_matrix4_x_axis(pitch)
-	yaw_mat := get_rotation_matrix4_y_axis(yaw)
-	roll_mat := get_rotation_matrix4_z_axis(roll)
+	state.camera.mat = get_camera_matrix(state.camera.pos, state.camera.pitch, state.camera.yaw)
 
-	look_mat := roll_mat * yaw_mat * pitch_mat
-
-	state.player_cam = look_mat * movement_mat * state.player_cam
 	state.fov += fov_delta * f32(state.dt) * PLAYER_FOV_SPEED
 }
 
@@ -539,7 +519,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	}
 	else if key == glfw.KEY_F && action == glfw.PRESS {
 		// FIXME: Doesn't work
-		state.light_source_pos = state.player_cam[3].xyz
+		state.light_source_pos = -state.camera.pos
 	}
 	else if (key >= glfw.KEY_1 && key <= glfw.KEY_3) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)

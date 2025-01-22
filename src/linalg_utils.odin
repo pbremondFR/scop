@@ -4,6 +4,8 @@ import "core:math"
 import "core:math/linalg"
 
 Mat4f :: matrix[4, 4]f32
+Mat3f :: matrix[3, 3]f32
+Mat2f :: matrix[2, 2]f32
 
 UNIT_MAT4F: Mat4f: {
 	1.0, 0.0, 0.0, 0.0,
