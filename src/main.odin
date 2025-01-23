@@ -207,51 +207,22 @@ main :: proc() {
 		for id in shader_programs do gl.DeleteProgram(id)
 	}
 
-	// Setup VAO, VBO, EBO
-	vao, vbo, ebo: u32
-	gl.GenVertexArrays(1, &vao)
-	defer gl.DeleteVertexArrays(1, &vao)
-	gl.GenBuffers(1, &vbo)
-	defer gl.DeleteBuffers(1, &vbo)
-	gl.GenBuffers(1, &ebo)
-	defer gl.DeleteBuffers(1, &ebo)
-
-	gl.BindVertexArray(vao)
-
 	materials_array := materials_map_to_array(materials)
 	defer delete(materials_array)
 	for m, idx in materials_array {
 		fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
 	}
-	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(&obj_data, materials_array)
 
-	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
-		raw_data(vertex_buffer), gl.STATIC_DRAW)
-	// Copied to VRAM, we can now release memory on the CPU side
-	delete(vertex_buffer)
+	// === LOAD MAIN MODEL ===
+	main_model: GlModel = obj_data_to_gl_objects(&obj_data, materials_array)
+	assert(main_model.vao != 0 && main_model.vbo != 0 && main_model.ebo != 0)
+	defer {
+		gl.DeleteVertexArrays(1, &main_model.vao)
+		gl.DeleteBuffers(1, &main_model.vbo)
+		gl.DeleteBuffers(1, &main_model.ebo)
+	}
 
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
-	gl.EnableVertexAttribArray(0)
-
-	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
-	gl.EnableVertexAttribArray(1)
-
-	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(vertex_buffer[0]), offset_of(VertexData, material_idx))
-	gl.EnableVertexAttribArray(2)
-
-	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
-	gl.EnableVertexAttribArray(3)
-
-	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
-		raw_data(index_buffer), gl.STATIC_DRAW)
-	// Copied to VRAM, we can now release memory on the CPU side
-	delete(index_buffer)
-
-	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-	gl.BindVertexArray(0)
-
+	// === LOAD LIGHT CUBE ===
 	light_vao, light_vbo := create_light_source()
 	assert(light_vao != 0 && light_vbo != 0)
 	defer {
@@ -267,8 +238,8 @@ main :: proc() {
 	gl.BufferData(gl.UNIFORM_BUFFER, len(uniform_buffer_data) * size_of(uniform_buffer_data[0]),
 		raw_data(uniform_buffer_data), gl.STATIC_DRAW)
 	gl.BindBuffer(gl.UNIFORM_BUFFER, 0)
-	delete(uniform_buffer_data)
 	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
+	delete(uniform_buffer_data)
 
 	// === TEXTURES ===
 	// texture, texture_ok := get_gl_texture("resources/monki.bmp")
@@ -286,6 +257,7 @@ main :: proc() {
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
+	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 
 	old_time, time: f64 = glfw.GetTime(), glfw.GetTime()
 
@@ -327,15 +299,15 @@ main :: proc() {
 		mvp_matrix := proj_matrix * state.camera.mat * model_matrix
 		set_shader_uniform(shader_programs[state.shader_program], "mvp", &mvp_matrix)
 
-		gl.BindVertexArray(vao)
-		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
+		gl.BindVertexArray(main_model.vao)
+		gl.DrawElements(gl.TRIANGLES, main_model.ebo_len, gl.UNSIGNED_INT, nil)
 
 		// === VISUALIZE VERTEX NORMAL VECTORS ===
 		if state.enable_normals_view {
 			gl.UseProgram(shader_programs[.VertNormVectors])
 			set_shader_uniform(shader_programs[.VertNormVectors], "mvp", &mvp_matrix)
 			set_shader_uniform(shader_programs[.VertNormVectors], "vec_norm_len", state.normals_view_length)
-			gl.DrawElements(gl.POINTS, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
+			gl.DrawElements(gl.POINTS, main_model.ebo_len, gl.UNSIGNED_INT, nil)
 		}
 
 		// === DRAW LIGHT CUBE ===

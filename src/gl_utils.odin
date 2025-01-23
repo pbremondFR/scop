@@ -180,6 +180,7 @@ append_vertex_in_vertex_buffer :: proc(
 	 */
 	if vertex_id.uv_idx == clang.UINT32_MAX {
 		new_idx := u32(len(obj_data.tex_coords))
+		// If UV coordinates don't exist, set them to the vertex's position
 		append(&obj_data.tex_coords, obj_data.vert_positions[vertex_id.pos_idx])
 		vertex_id.uv_idx = new_idx
 	}
@@ -221,8 +222,9 @@ materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []Wav
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
 obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []WavefrontMaterial) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
-	vertex_buffer := make([dynamic]VertexData)
-	index_buffer := make([dynamic]u32)
+	// Pre-allocate enough memory for the maximum amount of vertices
+	vertex_buffer := make([dynamic]VertexData, 0, len(obj_data.vertex_indices))
+	index_buffer := make([dynamic]u32, 0, len(obj_data.vertex_indices))
 
 	/*
 	 * Preface/REMINDER: A VERTEX IS NOT JUST A POSITION. The vertex's position is only one of its ATTRIBUTES.
@@ -258,7 +260,69 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []Wave
 		}
 	}
 
+	// Release unused memory if any (due to de-duplicated vertices)
+	shrink(&vertex_buffer)
+	shrink(&index_buffer)
 	return vertex_buffer[:], index_buffer[:]
+}
+
+GlModel :: struct {
+	vao: u32,
+	vbo: u32,
+	vbo_len: i32,
+	ebo: u32, // Also known as IBO?
+	ebo_len: i32,
+}
+
+obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: []WavefrontMaterial) -> (gl_model: GlModel) {
+	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(obj_data, materials)
+	defer {
+		// Once those are sent to the GPU memory, we can release them from CPU RAM
+		delete(vertex_buffer)
+		delete(index_buffer)
+	}
+	// TODO: New (openGL 4.5+) method of doing this?
+	// https://github.com/fendevel/Guide-to-Modern-OpenGL-Functions?tab=readme-ov-file#glbuffer
+	// https://www.reddit.com/r/opengl/comments/18rkgg3/one_vao_for_multiple_vbos/
+	// TODO: Error handling if anything below this comment fails. Painful. Fuck OpenGL function signatures.
+
+	gl_model.vbo_len = i32(len(vertex_buffer))
+	gl_model.ebo_len = i32(len(index_buffer))
+
+	// Generate buffers for VAO, VBO and EBO
+	gl.GenVertexArrays(1, &gl_model.vao)
+	gl.GenBuffers(1, &gl_model.vbo)
+	gl.GenBuffers(1, &gl_model.ebo)
+
+	// Bind to object's VAO
+	gl.BindVertexArray(gl_model.vao)
+
+	// Copy vertex data to GPU buffer object
+	gl.BindBuffer(gl.ARRAY_BUFFER, gl_model.vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
+		raw_data(vertex_buffer), gl.STATIC_DRAW)
+
+	// Enable & specify vertex attributes for VBO
+	gl.EnableVertexAttribArray(0)
+	gl.EnableVertexAttribArray(1)
+	gl.EnableVertexAttribArray(2)
+	gl.EnableVertexAttribArray(3)
+
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
+	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(vertex_buffer[0]), offset_of(VertexData, material_idx))
+	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
+
+	// Bind VAO to EBO and fill it with needed indices
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_model.ebo)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
+		raw_data(index_buffer), gl.STATIC_DRAW)
+
+	gl.BindVertexArray(0)
+	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
+
+	return
 }
 
 // XXX: Had to reorder members to get rid of padding & be compliant with GLSL std140 layout

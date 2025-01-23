@@ -66,7 +66,7 @@ delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 DEFAULT_MATERIAL :: WavefrontMaterial {
 	name = "__SCOP_DEFAULT_MATERIAL",
 
-	Ka = {0.7, 0.7, 0.7},
+	Ka = {0.4, 0.4, 0.4},
 	Kd = {0.5, 0.5, 0.5},
 	Ks = {0.5, 0.5, 0.5},
 	Ns = 39,
