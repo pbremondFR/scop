@@ -57,8 +57,9 @@ ShaderProgram :: enum {
 	FaceNormals,
 	VertNormals,
 	Texture,
+	RawMaterial,
 	VertNormVectors,
-	LightSource,
+	LightSource, // XXX: Leave this member last!
 }
 
 State :: struct {
@@ -180,10 +181,6 @@ main :: proc() {
 		return
 	}
 
-	for key, &mtl in materials {
-		fmt.printfln("Material %v:\n%v", mtl.name, mtl)
-	}
-
 	model_offset := get_model_offset_matrix(obj_data)
 	state.camera.pos = get_initial_camera_pos(obj_data)
 	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
@@ -196,8 +193,9 @@ main :: proc() {
 		.FaceNormals = get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
 		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
 		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
-		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
+		.RawMaterial = get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
 		.VertNormVectors = get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
+		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
 	for program in shader_programs {
 		if program == 0 {
