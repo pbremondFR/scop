@@ -29,8 +29,13 @@ compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (
 	return
 }
 
+get_shader_program :: proc{
+	get_shader_program_vert_frag,
+	get_shader_program_vert_frag_geom,
+}
+
 // Not allowed to load shaders with a library, so no gl utils from Odin :(
-get_shader_program :: proc(vert_shader_path: string, frag_shader_path: string) -> (program_id: u32, ok: bool) {
+get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path: string) -> (program_id: u32, ok: bool) {
 	vs_data := os.read_entire_file(vert_shader_path) or_return
 	defer delete(vs_data)
 
@@ -47,6 +52,48 @@ get_shader_program :: proc(vert_shader_path: string, frag_shader_path: string) -
 
 	program_id = gl.CreateProgram()
 	gl.AttachShader(program_id, vert_shader)
+	gl.AttachShader(program_id, frag_shader)
+	gl.LinkProgram(program_id)
+
+	success: i32
+	gl.GetProgramiv(program_id, gl.LINK_STATUS, &success);
+	if success == 0{
+		error_str: [512]u8
+		assert(size_of(error_str) == 512)
+		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
+		fmt.println("Error linking shader:", string(error_str[:]))
+	}
+
+	ok = (success != 0)
+	return
+}
+
+// Not allowed to load shaders with a library, so no gl utils from Odin :(
+get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, geom_shader_path: string) -> (program_id: u32, ok: bool) {
+	vs_data := os.read_entire_file(vert_shader_path) or_return
+	defer delete(vs_data)
+
+	fs_data := os.read_entire_file(frag_shader_path) or_return
+	defer delete(fs_data)
+
+	gs_data := os.read_entire_file(geom_shader_path) or_return
+	defer delete(gs_data)
+
+	vert_shader := compile_shader_from_source(string(vs_data), gl.VERTEX_SHADER) or_return
+	defer gl.DeleteShader(vert_shader)
+	fmt.printfln("Compiled %v", vert_shader_path)
+
+	geom_shader := compile_shader_from_source(string(gs_data), gl.GEOMETRY_SHADER) or_return
+	defer gl.DeleteShader(geom_shader)
+	fmt.printfln("Compiled %v", geom_shader_path)
+
+	frag_shader := compile_shader_from_source(string(fs_data), gl.FRAGMENT_SHADER) or_return
+	defer gl.DeleteShader(frag_shader)
+	fmt.printfln("Compiled %v", frag_shader_path)
+
+	program_id = gl.CreateProgram()
+	gl.AttachShader(program_id, vert_shader)
+	gl.AttachShader(program_id, geom_shader)
 	gl.AttachShader(program_id, frag_shader)
 	gl.LinkProgram(program_id)
 
@@ -246,6 +293,7 @@ wavefront_materials_to_uniform_buffer :: proc(materials: []WavefrontMaterial) ->
 set_shader_uniform :: proc{
 	set_shader_uniform_mat4f,
 	set_shader_uniform_vec3f,
+	set_shader_uniform_f32,
 }
 
 set_shader_uniform_mat4f :: proc(shader_program: u32, uniform_name: string, mat: ^Mat4f) {
@@ -257,4 +305,9 @@ set_shader_uniform_mat4f :: proc(shader_program: u32, uniform_name: string, mat:
 set_shader_uniform_vec3f :: proc(shader_program: u32, uniform_name: string, vec: ^Vec3f) {
 	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
 	gl.Uniform3fv(uniform_location, 1, raw_data(vec))
+}
+
+set_shader_uniform_f32 :: proc(shader_program: u32, uniform_name: string, value: f32) {
+	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
+	gl.Uniform1f(uniform_location, value)
 }

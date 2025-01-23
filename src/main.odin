@@ -57,6 +57,7 @@ ShaderProgram :: enum {
 	FaceNormals,
 	VertNormals,
 	Texture,
+	VertNormVectors,
 	LightSource,
 }
 
@@ -65,17 +66,20 @@ State :: struct {
 	fov: f32,
 	dt: f64,
 	glfw_inputs: map[i32]bool,
-	// player_cam: Mat4f,
+
 	camera: PlayerCamera,
 	light_source_pos: Vec3f,
 	enable_model_spin: bool,
 	shader_program: ShaderProgram,
+	enable_normals_view: bool,
+	normals_view_length: f32,
 }
 
 state := State{
 	window_size = {1024, 1024},
 	fov = math.to_radians_f32(70.0),
 	shader_program = .FaceNormals,
+	normals_view_length = 1.0,
 }
 
 // For tracking allocator below (leaks/double free debugging)
@@ -193,6 +197,7 @@ main :: proc() {
 		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
 		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
 		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
+		.VertNormVectors = get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
 	}
 	for program in shader_programs {
 		if program == 0 {
@@ -320,9 +325,20 @@ main :: proc() {
 		set_shader_uniform(shader_programs[state.shader_program], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[state.shader_program], "light_color", &Vec3f{1, 1, 1})
 		set_shader_uniform(shader_programs[state.shader_program], "view_pos", &state.camera.pos)
+		// Precomputing the MVP matrix saves a lot of computation time on the GPU
+		mvp_matrix := proj_matrix * state.camera.mat * model_matrix
+		set_shader_uniform(shader_programs[state.shader_program], "mvp", &mvp_matrix)
 
 		gl.BindVertexArray(vao)
 		gl.DrawElements(gl.TRIANGLES, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
+
+		// === VISUALIZE VERTEX NORMAL VECTORS ===
+		if state.enable_normals_view {
+			gl.UseProgram(shader_programs[.VertNormVectors])
+			set_shader_uniform(shader_programs[.VertNormVectors], "mvp", &mvp_matrix)
+			set_shader_uniform(shader_programs[.VertNormVectors], "vec_norm_len", state.normals_view_length)
+			gl.DrawElements(gl.POINTS, cast(i32)len(index_buffer) * 3, gl.UNSIGNED_INT, nil)
+		}
 
 		// === DRAW LIGHT CUBE ===
 		gl.UseProgram(shader_programs[.LightSource])
@@ -385,6 +401,7 @@ get_light_cube_model_matrix :: proc(main_obj_model: WavefrontObjFile) -> (cube_m
 }
 
 create_light_source :: proc() -> (light_vao, light_vbo: u32) {
+	// FIXME: Cube vertices are in the wront order and I can't be arsed to use an EBO on this.
 	cube_vertices := [?]f32{
         -0.5, -0.5, -0.5,
          0.5, -0.5, -0.5,
@@ -526,9 +543,17 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	else if key == glfw.KEY_F && action == glfw.PRESS {
 		state.light_source_pos = -state.camera.pos
 	}
-	else if (key >= glfw.KEY_1 && key <= glfw.KEY_3) && action == glfw.PRESS {
+	else if (key >= glfw.KEY_1 && key <= glfw.KEY_4) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
 		state.shader_program = selected_shader
+	}
+	else if key == glfw.KEY_N && action == glfw.PRESS {
+		state.enable_normals_view = !state.enable_normals_view
+	}
+	else if (key == glfw.KEY_COMMA || key == glfw.KEY_PERIOD) {
+		STEP :: 0.25
+		delta :f32 = -STEP if key == glfw.KEY_COMMA else STEP;
+		state.normals_view_length = math.max(state.normals_view_length + delta, 0 + STEP)
 	}
 
 	if action == glfw.PRESS {
