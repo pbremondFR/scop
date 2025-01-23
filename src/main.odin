@@ -250,10 +250,9 @@ main :: proc() {
 	}
 	defer gl.DeleteTextures(1, &texture.id)
 
-	// Enable/disable backface culling
-	// BUG: Light cube has got vertex order wrong for backface culling, doesn't look good :(
-	// gl.Enable(gl.CULL_FACE)
-	// gl.CullFace(gl.BACK)
+	// Enable backface culling
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.BACK)
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
@@ -371,50 +370,50 @@ get_light_cube_model_matrix :: proc(main_obj_model: WavefrontObjFile) -> (cube_m
 }
 
 create_light_source :: proc() -> (light_vao, light_vbo: u32) {
-	// FIXME: Cube vertices are in the wront order and I can't be arsed to use an EBO on this.
 	cube_vertices := [?]f32{
-        -0.5, -0.5, -0.5,
-         0.5, -0.5, -0.5,
-         0.5,  0.5, -0.5,
-         0.5,  0.5, -0.5,
-        -0.5,  0.5, -0.5,
-        -0.5, -0.5, -0.5,
-
-        -0.5, -0.5,  0.5,
-         0.5, -0.5,  0.5,
-         0.5,  0.5,  0.5,
-         0.5,  0.5,  0.5,
-        -0.5,  0.5,  0.5,
-        -0.5, -0.5,  0.5,
-
-        -0.5,  0.5,  0.5,
-        -0.5,  0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        -0.5, -0.5, -0.5,
-        -0.5, -0.5,  0.5,
-        -0.5,  0.5,  0.5,
-
-         0.5,  0.5,  0.5,
-         0.5,  0.5, -0.5,
-         0.5, -0.5, -0.5,
-         0.5, -0.5, -0.5,
-         0.5, -0.5,  0.5,
-         0.5,  0.5,  0.5,
-
-        -0.5, -0.5, -0.5,
-         0.5, -0.5, -0.5,
-         0.5, -0.5,  0.5,
-         0.5, -0.5,  0.5,
-        -0.5, -0.5,  0.5,
-        -0.5, -0.5, -0.5,
-
-        -0.5,  0.5, -0.5,
-         0.5,  0.5, -0.5,
-         0.5,  0.5,  0.5,
-         0.5,  0.5,  0.5,
-        -0.5,  0.5,  0.5,
-        -0.5,  0.5, -0.5,
-    };
+    // Back face
+    -0.5, -0.5, -0.5, // Bottom-left
+     0.5, -0.5, -0.5, // bottom-right
+     0.5,  0.5, -0.5, // top-right
+     0.5,  0.5, -0.5, // top-right
+    -0.5,  0.5, -0.5, // top-left
+    -0.5, -0.5, -0.5, // bottom-left
+    // Front face
+    -0.5, -0.5,  0.5, // bottom-left
+     0.5,  0.5,  0.5, // top-right
+     0.5, -0.5,  0.5, // bottom-right
+     0.5,  0.5,  0.5, // top-right
+    -0.5, -0.5,  0.5, // bottom-left
+    -0.5,  0.5,  0.5, // top-left
+    // Left face
+    -0.5,  0.5,  0.5, // top-right
+    -0.5, -0.5, -0.5, // bottom-left
+    -0.5,  0.5, -0.5, // top-left
+    -0.5, -0.5, -0.5, // bottom-left
+    -0.5,  0.5,  0.5, // top-right
+    -0.5, -0.5,  0.5, // bottom-right
+    // Right face
+     0.5,  0.5,  0.5, // top-left
+     0.5,  0.5, -0.5, // top-right
+     0.5, -0.5, -0.5, // bottom-right
+     0.5, -0.5, -0.5, // bottom-right
+     0.5, -0.5,  0.5, // bottom-left
+     0.5,  0.5,  0.5, // top-left
+    // Bottom face
+    -0.5, -0.5, -0.5, // top-right
+     0.5, -0.5,  0.5, // bottom-left
+     0.5, -0.5, -0.5, // top-left
+     0.5, -0.5,  0.5, // bottom-left
+    -0.5, -0.5, -0.5, // top-right
+    -0.5, -0.5,  0.5, // bottom-right
+    // Top face
+    -0.5,  0.5, -0.5, // top-left
+     0.5,  0.5, -0.5, // top-right
+     0.5,  0.5,  0.5, // bottom-right
+     0.5,  0.5,  0.5, // bottom-right
+    -0.5,  0.5,  0.5, // bottom-left
+    -0.5,  0.5, -0.5  // top-left
+    }
 
 	// TODO: Error checking?
 	gl.GenBuffers(1, &light_vbo)
@@ -433,7 +432,6 @@ create_light_source :: proc() -> (light_vao, light_vbo: u32) {
 	return
 }
 
-// TODO: Gimball lock world-coordinates roll so we don't roll our virtual head? Like in FPS games
 process_player_movements :: proc() {
 	movement: Vec3f = {0, 0, 0}
 	look: Vec3f = {0, 0, 0}
@@ -498,14 +496,12 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		// Odin-style ternary (looks cool, but a bit weird coming from C, order is different)
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE if wireframe else gl.FILL)
 		// You can also use C-style ternaries! YAAAAY
-
-		// XXX: Don't use backface culling at least for now
 		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
-		// if wireframe {
-		// 	gl.Disable(gl.CULL_FACE)
-		// } else {
-		// 	gl.Enable(gl.CULL_FACE)
-		// }
+		if wireframe {
+			gl.Disable(gl.CULL_FACE)
+		} else {
+			gl.Enable(gl.CULL_FACE)
+		}
 	}
 	else if key == glfw.KEY_R && action == glfw.PRESS {
 		state.enable_model_spin = !state.enable_model_spin
