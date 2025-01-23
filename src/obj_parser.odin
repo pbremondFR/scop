@@ -66,10 +66,10 @@ delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 DEFAULT_MATERIAL :: WavefrontMaterial {
 	name = "__SCOP_DEFAULT_MATERIAL",
 
-	Ka = {1.0, 1.0, 1.0},
-	Kd = {1.0, 1.0, 1.0},
-	Ks = {1.0, 1.0, 1.0},
-	Ns = 500,
+	Ka = {0.7, 0.7, 0.7},
+	Kd = {0.5, 0.5, 0.5},
+	Ks = {0.5, 0.5, 0.5},
+	Ns = 39,
 }
 
 WavefrontObjFile :: struct {

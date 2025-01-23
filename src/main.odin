@@ -277,6 +277,7 @@ main :: proc() {
 	defer gl.DeleteTextures(1, &texture.id)
 
 	// Enable/disable backface culling
+	// BUG: Light cube has got vertex order wrong for backface culling, doesn't look good :(
 	// gl.Enable(gl.CULL_FACE)
 	// gl.CullFace(gl.BACK)
 
