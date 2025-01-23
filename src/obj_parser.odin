@@ -321,8 +321,9 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 				parse_easy_face(&obj_data, split_line[1:], active_material_name) or_return
 			}
 		case "mtllib":
+			new_materials := parse_mtl_file(split_line[1], working_dir) or_return
 			delete(materials)
-			materials = parse_mtl_file(split_line[1], working_dir) or_return
+			materials = new_materials
 		case "usemtl":
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
