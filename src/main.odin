@@ -115,56 +115,6 @@ main :: proc() {
 		return
 	}
 
-	// GLFW_TRUE if successful, or GLFW_FALSE if an error occurred.
-	if(glfw.Init() != true){
-		fmt.println("Failed to initialize GLFW")
-		return
-	}
-	// Set Window Hints
-	// https://www.glfw.org/docs/3.3/window_guide.html#window_hints
-	// https://www.glfw.org/docs/3.3/group__window.html#ga7d9c8c62384b1e2821c4dc48952d2033
-	glfw.WindowHint(glfw.RESIZABLE, 1)
-	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
-	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-	// https://www.glfw.org/docs/3.1/group__init.html#gaaae48c0a18607ea4a4ba951d939f0901
-	defer glfw.Terminate()
-
-	// https://www.glfw.org/docs/3.3/group__window.html#ga3555a418df92ad53f917597fe2f64aeb
-	window := glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
-	// https://www.glfw.org/docs/latest/group__window.html#gacdf43e51376051d2c091662e9fe3d7b2
-	defer glfw.DestroyWindow(window)
-
-	// If the window pointer is invalid
-	if window == nil {
-		fmt.println("Unable to create window")
-		return
-	}
-
-	// https://www.glfw.org/docs/3.3/group__context.html#ga1c04dc242268f827290fe40aa1c91157
-	glfw.MakeContextCurrent(window)
-
-	// Enable vsync
-	// https://www.glfw.org/docs/3.3/group__context.html#ga6d4e0cdf151b5e579bd67f13202994ed
-	glfw.SwapInterval(1)
-
-	// This function sets the key callback of the specified window, which is called when a key is pressed, repeated or released.
-	// https://www.glfw.org/docs/3.3/group__input.html#ga1caf18159767e761185e49a3be019f8d
-	glfw.SetKeyCallback(window, key_callback)
-
-	// This function sets the framebuffer resize callback of the specified window, which is called when the framebuffer of the specified window is resized.
-	// https://www.glfw.org/docs/3.3/group__window.html#gab3fb7c3366577daef18c0023e2a8591f
-	glfw.SetFramebufferSizeCallback(window, size_callback)
-
-	// Set OpenGL Context bindings using the helper function
-	// See Odin Vendor source for specifc implementation details
-	// https://github.com/odin-lang/Odin/tree/master/vendor/OpenGL
-	// https://www.glfw.org/docs/3.3/group__context.html#ga35f1837e6f666781842483937612f163
-
-	// casting the c.int to int
-	// This is needed because the GL_MAJOR_VERSION has an explicit type of c.int
-	gl.load_up_to(int(GL_MAJOR_VERSION), GL_MINOR_VERSION, glfw.gl_set_proc_address)
-
 	// Get desired .obj file from program arguments. main() doesn't take args,
 	// it's more like in Python with os.args
 	file_path := os.args[1]
@@ -187,6 +137,16 @@ main :: proc() {
 	state.light_source_pos = state.camera.pos
 	state.light_source_pos.z *= 2
 	state.light_source_pos.y = -state.light_source_pos.z
+
+	// === INIT OPENGL ===
+	window, opengl_ok := init_OpenGL()
+	if !opengl_ok {
+		return
+	}
+	defer {
+		glfw.Terminate()
+		glfw.DestroyWindow(window)
+	}
 
 	// ===== SHADERS =====
 	shader_programs := [ShaderProgram]u32 {
@@ -533,4 +493,56 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
 	gl.Viewport(0, 0, width, height)
 	state.window_size = {width, height}
+}
+
+init_OpenGL :: proc() -> (window: glfw.WindowHandle, ok: bool) {
+	// GLFW_TRUE if successful, or GLFW_FALSE if an error occurred.
+	if(glfw.Init() != true){
+		fmt.println("Failed to initialize GLFW")
+		return
+	}
+	// Set Window Hints
+	// https://www.glfw.org/docs/3.3/window_guide.html#window_hints
+	// https://www.glfw.org/docs/3.3/group__window.html#ga7d9c8c62384b1e2821c4dc48952d2033
+	glfw.WindowHint(glfw.RESIZABLE, 1)
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
+	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+	// https://www.glfw.org/docs/3.1/group__init.html#gaaae48c0a18607ea4a4ba951d939f0901
+
+	// https://www.glfw.org/docs/3.3/group__window.html#ga3555a418df92ad53f917597fe2f64aeb
+	window = glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
+	// https://www.glfw.org/docs/latest/group__window.html#gacdf43e51376051d2c091662e9fe3d7b2
+
+	// If the window pointer is invalid
+	if window == nil {
+		fmt.println("Unable to create window")
+		return
+	}
+
+	// https://www.glfw.org/docs/3.3/group__context.html#ga1c04dc242268f827290fe40aa1c91157
+	glfw.MakeContextCurrent(window)
+
+	// Enable vsync
+	// https://www.glfw.org/docs/3.3/group__context.html#ga6d4e0cdf151b5e579bd67f13202994ed
+	glfw.SwapInterval(1)
+
+	// This function sets the key callback of the specified window, which is called when a key is pressed, repeated or released.
+	// https://www.glfw.org/docs/3.3/group__input.html#ga1caf18159767e761185e49a3be019f8d
+	glfw.SetKeyCallback(window, key_callback)
+
+	// This function sets the framebuffer resize callback of the specified window, which is called when the framebuffer of the specified window is resized.
+	// https://www.glfw.org/docs/3.3/group__window.html#gab3fb7c3366577daef18c0023e2a8591f
+	glfw.SetFramebufferSizeCallback(window, size_callback)
+
+	// Set OpenGL Context bindings using the helper function
+	// See Odin Vendor source for specifc implementation details
+	// https://github.com/odin-lang/Odin/tree/master/vendor/OpenGL
+	// https://www.glfw.org/docs/3.3/group__context.html#ga35f1837e6f666781842483937612f163
+
+	// casting the c.int to int
+	// This is needed because the GL_MAJOR_VERSION has an explicit type of c.int
+	gl.load_up_to(int(GL_MAJOR_VERSION), GL_MINOR_VERSION, glfw.gl_set_proc_address)
+	ok = true
+	return
 }
