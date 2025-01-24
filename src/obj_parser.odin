@@ -63,15 +63,29 @@ WavefrontMaterial :: struct {
 
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
+	delete(mtl.name)
 }
 
-DEFAULT_MATERIAL :: WavefrontMaterial {
-	name = "__SCOP_DEFAULT_MATERIAL",
+// DEFAULT_MATERIAL :: WavefrontMaterial {
+// 	name = "__SCOP_DEFAULT_MATERIAL",
 
-	Ka = {0.4, 0.4, 0.4},
-	Kd = {0.5, 0.5, 0.5},
-	Ks = {0.5, 0.5, 0.5},
-	Ns = 39,
+// 	Ka = {0.4, 0.4, 0.4},
+// 	Kd = {0.5, 0.5, 0.5},
+// 	Ks = {0.5, 0.5, 0.5},
+// 	Ns = 39,
+// }
+
+DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
+
+get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME) -> WavefrontMaterial {
+	return WavefrontMaterial {
+		name = strings.clone(name),
+
+		Ka = {0.4, 0.4, 0.4},
+		Kd = {0.5, 0.5, 0.5},
+		Ks = {0.5, 0.5, 0.5},
+		Ns = 39,
+	}
 }
 
 WavefrontObjFile :: struct {
@@ -231,8 +245,8 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))
 
-	materials[DEFAULT_MATERIAL.name] = DEFAULT_MATERIAL
-	active_material_name := DEFAULT_MATERIAL.name
+	materials[DEFAULT_MATERIAL_NAME] = get_default_material()
+	active_material_name := DEFAULT_MATERIAL_NAME
 
 	// Iterate over every line of the .mtl file
 	it := string(file_contents)
@@ -254,9 +268,11 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 		switch split_line[0] {
 		case "newmtl":
 			active_material_name = split_line[1]
-			new_material := DEFAULT_MATERIAL
-			new_material.name = active_material_name
-			materials[active_material_name] = new_material
+			new_material := get_default_material(active_material_name)
+			materials[new_material.name] = new_material
+			// BUG: Using this commented line instead of the one above will SIGSEGV at line 344
+			// when checking `if !(split_line[1] in materials) do return`
+			// materials[active_material_name] = new_material
 		case "Ka":
 			parse_vec3(split_line[1:], &active_material.Ka) or_return
 		case "Kd":
@@ -292,11 +308,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	working_dir := filepath.dir(obj_file_path)
 	defer delete(working_dir)
 
-	materials = map[string]WavefrontMaterial{
-		DEFAULT_MATERIAL.name = DEFAULT_MATERIAL
-	}
-	// TESTME: This should not be freed, right??? I don't see an allocation?
-	active_material_name := DEFAULT_MATERIAL.name
+	active_material_name := DEFAULT_MATERIAL_NAME
 
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
@@ -323,17 +335,14 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 				parse_easy_face(&obj_data, split_line[1:], active_material_name) or_return
 			}
 		case "mtllib":
-			new_materials := parse_mtl_file(split_line[1], working_dir) or_return
-			delete(materials)
-			materials = new_materials
+			materials = parse_mtl_file(split_line[1], working_dir) or_return
 		case "usemtl":
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
 			// but that might be overkill/beyond the Wavefront spec
+			// BUG: See other BUG comment in parse_mtl_file: this SIGSEGVs in some weird case.
 			if !(split_line[1] in materials) do return
-			// FIXME: This memory will be freed by the "free_all(temp_allocator)" call, right?
-			// Use after free?
-			active_material_name = split_line[1]
+			active_material_name = materials[split_line[1]].name
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)
 		}
@@ -346,6 +355,9 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		// Print limit as MAX_MATERIALS - 1 because there is always our own default material
 		fmt.printfln("Error: Too many materials! Limit is %v", MAX_MATERIALS - 1)
 		return
+	}
+	else if len(materials) == 0 {
+		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	}
 
 	ok = true
