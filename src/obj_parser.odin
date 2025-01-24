@@ -8,6 +8,7 @@ import "core:strings"
 import "core:fmt"
 import "core:strconv"
 import "core:path/filepath"
+import "core:encoding/ansi"
 import clang "core:c"
 
 Vec2f :: [2]f32
@@ -65,15 +66,6 @@ delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
 	delete(mtl.name)
 }
-
-// DEFAULT_MATERIAL :: WavefrontMaterial {
-// 	name = "__SCOP_DEFAULT_MATERIAL",
-
-// 	Ka = {0.4, 0.4, 0.4},
-// 	Kd = {0.5, 0.5, 0.5},
-// 	Ks = {0.5, 0.5, 0.5},
-// 	Ns = 39,
-// }
 
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
 
@@ -270,9 +262,6 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 			active_material_name = split_line[1]
 			new_material := get_default_material(active_material_name)
 			materials[new_material.name] = new_material
-			// BUG: Using this commented line instead of the one above will SIGSEGV at line 344
-			// when checking `if !(split_line[1] in materials) do return`
-			// materials[active_material_name] = new_material
 		case "Ka":
 			parse_vec3(split_line[1:], &active_material.Ka) or_return
 		case "Kd":
@@ -294,6 +283,8 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 }
 
 MAX_MATERIALS :: 128
+WARNING_YELLOW_TEXT :: ansi.CSI + ansi.FG_YELLOW + ansi.SGR + "WARNING:" + ansi.CSI + ansi.RESET + ansi.SGR
+ERROR_RED_TEXT :: ansi.CSI + ansi.FG_RED + ansi.SGR + "ERROR:" + ansi.CSI + ansi.RESET + ansi.SGR
 
 // TODO: Handle more complex face definitions
 parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
@@ -311,16 +302,24 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	active_material_name := DEFAULT_MATERIAL_NAME
 
 	it := string(file_contents)
+	line_number := 0
 	for line in strings.split_lines_iterator(&it) {
+		line_number += 1
 		hash_index := strings.index_byte(line, '#')
 		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
 		to_parse = strings.trim_space(to_parse)
 		// Skip rest of work if length is 0
-		(len(to_parse) > 0) or_continue
-
+		if len(to_parse) == 0 {
+			continue
+		}
+		// Split current line into tokens with temp_allocator to parse easily
 		split_line := strings.fields(to_parse, context.temp_allocator)
 		defer free_all(context.temp_allocator)
-
+		// We should never get less than two tokens!
+		if len(split_line) < 2 {
+			fmt.printfln(WARNING_YELLOW_TEXT + " line %v: incorrect .obj statement has less than 2 tokens: `%v'", line_number, line)
+			continue
+		}
 		switch split_line[0] {
 		case "v":
 			parse_vertex(&obj_data, split_line[1:]) or_return
@@ -340,8 +339,10 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
 			// but that might be overkill/beyond the Wavefront spec
-			// BUG: See other BUG comment in parse_mtl_file: this SIGSEGVs in some weird case.
-			if !(split_line[1] in materials) do return
+			if !(split_line[1] in materials) {
+				fmt.printfln(ERROR_RED_TEXT + " line %v: Material `%v' is not found in current materials", line_number, split_line[1])
+				return
+			}
 			active_material_name = materials[split_line[1]].name
 		case: // default
 			fmt.println("Unrecognized line:", to_parse)

@@ -122,8 +122,7 @@ main :: proc() {
 	// XXX: These defer calls are fine even in case of error
 	defer {
 		delete_ObjFileData(obj_data)
-		// NOTE: No-op for now
-		for ley, &mtl in materials do delete_WavefrontMaterial(mtl)
+		for key, &mtl in materials do delete_WavefrontMaterial(mtl)
 		delete(materials)
 	}
 	if !obj_ok {
@@ -246,7 +245,8 @@ main :: proc() {
 			time_accum += state.dt
 		}
 		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * model_offset
-		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 500)
+		// TODO: Determine far plane distance based on object size?
+		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 1500)
 
 		set_shader_uniform(shader_programs[state.shader_program], "model", &model_matrix)
 		set_shader_uniform(shader_programs[state.shader_program], "view", &state.camera.mat)
