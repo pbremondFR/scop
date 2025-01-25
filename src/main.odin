@@ -58,8 +58,10 @@ ShaderProgram :: enum {
 	VertNormals,
 	Texture,
 	RawMaterial,
+	TransparencyShader,
+	// XXX: LEAVE THESE ONES LAST AND IN THIS ORDER
 	VertNormVectors,
-	LightSource, // XXX: Leave this member last!
+	LightSource,
 }
 
 State :: struct {
@@ -153,6 +155,7 @@ main :: proc() {
 		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
 		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
 		.RawMaterial = get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
+		.TransparencyShader = get_shader_program("shaders/vertex.vert", "shaders/transparency.frag") or_else 0,
 		.VertNormVectors = get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
 		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
@@ -202,8 +205,8 @@ main :: proc() {
 	delete(uniform_buffer_data)
 
 	// === TEXTURES ===
-	// texture, texture_ok := get_gl_texture("resources/monki.bmp")
-	texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
+	texture, texture_ok := get_gl_texture("resources/Rafale-airframe_baseColor.bmp")
+	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
 	if !texture_ok {
 		fmt.println("Failed to load texture")
 		return
@@ -211,8 +214,11 @@ main :: proc() {
 	defer gl.DeleteTextures(1, &texture.id)
 
 	// Enable backface culling
-	gl.Enable(gl.CULL_FACE)
-	gl.CullFace(gl.BACK)
+	// gl.Enable(gl.CULL_FACE)
+	// gl.CullFace(gl.BACK)
+
+	gl.Enable(gl.BLEND);
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
@@ -267,9 +273,9 @@ main :: proc() {
 
 		// NEW WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
 		for range in main_model.index_ranges {
-			if materials_array[range.material_index].Tr > 0.0 {
-				continue
-			}
+			// if materials_array[range.material_index].Tr > 0.0 {
+			// 	continue
+			// }
 			gl.DrawElements(gl.TRIANGLES, range.length, gl.UNSIGNED_INT, rawptr(range.begin * size_of(u32)))
 		}
 
@@ -481,8 +487,9 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	else if key == glfw.KEY_F && action == glfw.PRESS {
 		state.light_source_pos = -state.camera.pos
 	}
-	else if (key >= glfw.KEY_1 && key <= glfw.KEY_4) && action == glfw.PRESS {
+	else if (key >= glfw.KEY_1 && key <= glfw.KEY_5) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
+		fmt.println("Selecting shader", selected_shader)
 		state.shader_program = selected_shader
 	}
 	else if key == glfw.KEY_N && action == glfw.PRESS {
