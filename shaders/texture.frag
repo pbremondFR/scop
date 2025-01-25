@@ -4,7 +4,7 @@ struct MaterialProperties{
 	vec3	Ka;
 	float	Ns;
 	vec3	Kd;
-	float	Tr;
+	float	d;
 	vec3	Ks;
 	float	Ni;
 	vec3	Tf;

@@ -58,6 +58,7 @@ ShaderProgram :: enum {
 	VertNormals,
 	Texture,
 	RawMaterial,
+	DefaultShader,
 	TransparencyShader,
 	// XXX: LEAVE THESE ONES LAST AND IN THIS ORDER
 	VertNormVectors,
@@ -151,13 +152,14 @@ main :: proc() {
 
 	// ===== SHADERS =====
 	shader_programs := [ShaderProgram]u32 {
-		.FaceNormals = get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
-		.VertNormals = get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
-		.Texture = get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
-		.RawMaterial = get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
-		.TransparencyShader = get_shader_program("shaders/vertex.vert", "shaders/transparency.frag") or_else 0,
-		.VertNormVectors = get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
-		.LightSource = get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
+		.FaceNormals		= get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
+		.VertNormals		= get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
+		.Texture			= get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
+		.RawMaterial		= get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
+		.DefaultShader		= get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
+		.TransparencyShader	= get_shader_program("shaders/vertex.vert", "shaders/transparency.frag") or_else 0,
+		.VertNormVectors	= get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
+		.LightSource		= get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
 	for program in shader_programs {
 		if program == 0 {

@@ -4,7 +4,7 @@ struct MaterialProperties{
 	vec3	Ka;
 	float	Ns;
 	vec3	Kd;
-	float	Tr;
+	float	d;
 	vec3	Ks;
 	float	Ni;
 	vec3	Tf;
@@ -60,7 +60,7 @@ void main()
 
 	vec3 final_color3 = (ambient + diffuse + specular);// * texture_color.rgb;
 
-	vec4 color = vec4(final_color3, 1.0 - materials[MtlID].Tr);
+	vec4 color = vec4(final_color3, materials[MtlID].d);
 	// float z = 100;
 	// float weight =
 	// 	max(

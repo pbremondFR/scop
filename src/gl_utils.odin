@@ -373,7 +373,7 @@ MaterialData :: struct #packed {
 	Ka: Vec3f "Ambient color",
 	Ns: f32 "Specular exponent",
 	Kd: Vec3f "Diffuse color",
-	Tr: f32 "Transparency", // Also known as "d" (disolve)
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dossolve)
 	Ks: Vec3f "Specular color",
 	Ni: f32 "Index of refraction",
 	Tf: Vec3f "Transmission filter color",
@@ -388,7 +388,7 @@ wavefront_materials_to_uniform_buffer :: proc(materials: []^WavefrontMaterial) -
 			Kd = material.Kd,
 			Ks = material.Ks,
 			Ns = material.Ns,
-			Tr = material.Tr,
+			d = material.d,
 			Tf = material.Tf,
 			Ni = material.Ni,
 			illum = material.illum,

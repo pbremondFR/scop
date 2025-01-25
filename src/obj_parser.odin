@@ -48,7 +48,7 @@ WavefrontMaterial :: struct {
 	Kd: Vec3f "Diffuse color",
 	Ks: Vec3f "Specular color",
 	Ns: f32 "Specular exponent",
-	Tr: f32 "Transparency", // Also known as "d" (disolve)
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dossolve)
 	Tf: Vec3f "Transmission filter color",
 	Ni: f32 "Index of refraction",
 	illum: IlluminationModel "Illumination model",
@@ -56,16 +56,24 @@ WavefrontMaterial :: struct {
 	map_Ka: string "Ambient texture map",
 	map_Kd: string "Diffuse texture map",
 	map_Ks: string "Specular color texture map",
-	map_Ns: string "Specular highlight component",
+	map_Ns: string "Specular exponent texture map",
 	map_d: string "Alpha texture map",
 	map_bump: string "Bump map",
-	disp_map: string "Displacement map",
+	map_disp: string "Displacement map",
 	decal: string "Stencil decal texture",
 }
 
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
 	delete(mtl.name)
+	delete(mtl.map_Ka)
+	delete(mtl.map_Kd)
+	delete(mtl.map_Ks)
+	delete(mtl.map_Ns)
+	delete(mtl.map_d)
+	delete(mtl.map_bump)
+	delete(mtl.map_disp)
+	delete(mtl.decal)
 }
 
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
@@ -225,6 +233,11 @@ parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
 	return
 }
 
+MAX_MATERIALS :: 128
+WARNING_YELLOW_TEXT :: ansi.CSI + ansi.FG_YELLOW + ansi.SGR + "WARNING:" + ansi.CSI + ansi.RESET + ansi.SGR
+ERROR_RED_TEXT :: ansi.CSI + ansi.FG_RED + ansi.SGR + "ERROR:" + ansi.CSI + ansi.RESET + ansi.SGR
+NOTE_BLUE_TEXT ::ansi.CSI + ansi.FG_BLUE + ansi.SGR + "NOTE:" + ansi.CSI + ansi.RESET + ansi.SGR
+
 parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
 	using virtual.Map_File_Flag
 
@@ -242,19 +255,25 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 	active_material_name := DEFAULT_MATERIAL_NAME
 
 	// Iterate over every line of the .mtl file
+	line_number := 0
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
+		line_number += 1
 		// Slice away everything after the #
 		hash_index := strings.index_byte(line, '#')
 		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
 		to_parse = strings.trim_space(to_parse)
+		// Skip rest of work if line is empty
 		if (len(to_parse) == 0) {
 			continue
 		}
 
 		split_line := strings.fields(to_parse, context.temp_allocator)
-		// defer free_all(context.temp_allocator)
-
+		// Don't free memory from temp_allocator here, it will be done by calling function!
+		if len(split_line) < 2 {
+			fmt.printfln(WARNING_YELLOW_TEXT + "%v:%v: incorrect .mtl statement has less than 2 tokens: `%v'", mtl_file_name, line_number, line)
+			continue
+		}
 		active_material : ^WavefrontMaterial = &materials[active_material_name]
 		assert(active_material_name in materials)
 
@@ -272,20 +291,32 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 		case "Ns":
 			active_material.Ns = strconv.parse_f32(split_line[1]) or_else 32
 		case "Tr":
-			active_material.Tr = strconv.parse_f32(split_line[1]) or_else 0.0
+			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else 0.0)
 		case "d":
-			active_material.Tr = 1.0 - (strconv.parse_f32(split_line[1]) or_else 0.0)
+			active_material.d = strconv.parse_f32(split_line[1]) or_else 0.0
+		case "map_Ka":
+			active_material.map_Ka = strings.clone(split_line[1])
+		// case "map_Kd":
+		// 	active_material.map_Kd = strings.clone(split_line[1])
+		// case "map_Ks":
+		// 	active_material.map_Ks = strings.clone(split_line[1])
+		// case "map_Ns":
+		// 	active_material.map_Ns = strings.clone(split_line[1])
+		// case "map_d":
+		// 	active_material.map_d = strings.clone(split_line[1])
+		// case "map_bump", "bump":
+		// 	active_material.map_bump = strings.clone(split_line[1])
+		// case "disp":
+		// 	active_material.map_disp = strings.clone(split_line[1])
+		// case "decal":
+		// 	active_material.decal = strings.clone(split_line[1])
 		case: // default
-			fmt.println("Unrecognized line:", to_parse)
+				fmt.printfln(NOTE_BLUE_TEXT + " %v:%v: unsupported %v directive", mtl_file_name, line_number, split_line[0])
 		}
 	}
 	ok = true
 	return
 }
-
-MAX_MATERIALS :: 128
-WARNING_YELLOW_TEXT :: ansi.CSI + ansi.FG_YELLOW + ansi.SGR + "WARNING:" + ansi.CSI + ansi.RESET + ansi.SGR
-ERROR_RED_TEXT :: ansi.CSI + ansi.FG_RED + ansi.SGR + "ERROR:" + ansi.CSI + ansi.RESET + ansi.SGR
 
 // TODO: Handle more complex face definitions
 parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
@@ -298,6 +329,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	defer virtual.release(raw_data(file_contents), len(file_contents))
 
 	working_dir := filepath.dir(obj_file_path)
+	file_name := filepath.base(obj_file_path) // Just a slice, no alloc
 	defer delete(working_dir)
 
 	active_material_name := DEFAULT_MATERIAL_NAME
@@ -318,7 +350,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		defer free_all(context.temp_allocator)
 		// We should never get less than two tokens!
 		if len(split_line) < 2 {
-			fmt.printfln(WARNING_YELLOW_TEXT + " line %v: incorrect .obj statement has less than 2 tokens: `%v'", line_number, line)
+			fmt.printfln(WARNING_YELLOW_TEXT + " %v:%v: incorrect .obj statement has less than 2 tokens: `%v'", obj_file_path, line_number, line)
 			continue
 		}
 		switch split_line[0] {
@@ -346,7 +378,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			}
 			active_material_name = materials[split_line[1]].name
 		case: // default
-			fmt.println("Unrecognized line:", to_parse)
+			fmt.printfln(NOTE_BLUE_TEXT + " %v:%v: unsupported %v directive", obj_file_path, line_number, split_line[0])
 		}
 	}
 
