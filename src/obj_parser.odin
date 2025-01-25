@@ -42,6 +42,7 @@ IlluminationModel :: enum u32 {
 
 WavefrontMaterial :: struct {
 	name: string "Material name",
+	index: u32 "Material index",
 
 	Ka: Vec3f "Ambient color",
 	Kd: Vec3f "Diffuse color",

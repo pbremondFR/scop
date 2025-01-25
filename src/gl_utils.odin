@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:math"
 import "core:slice"
 import "core:strings"
+import "core:mem"
 import gl "vendor:OpenGL"
 import clang "core:c"
 
@@ -158,20 +159,11 @@ VertexData :: struct #packed {
 @(private="file")
 append_vertex_in_vertex_buffer :: proc(
 	obj_data: ^WavefrontObjFile,
-	materials: []WavefrontMaterial,
+	material_index: u32,
 	vertex_buffer: ^[dynamic]VertexData,
 	vertex_id: WavefrontVertexID)
 {
 	vertex_id := vertex_id
-
-	// XXX: Assume material name always exists here, it's ensured in the obj parser atm
-	material_index: u32
-	for i in 0..<len(materials) {
-		if materials[i].name == vertex_id.material {
-			material_index = u32(i)
-			break
-		}
-	}
 
 	/*
 	 * A non-existant index is signaled by a UINT32_MAX. In this case, append appropriate zero-filled
@@ -201,19 +193,40 @@ append_vertex_in_vertex_buffer :: proc(
 	append(vertex_buffer, vertex)
 }
 
-materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []WavefrontMaterial {
-	output_array := make([]WavefrontMaterial, len(materials))
+/*
+ * Create an array containing all materials, sorted by material ID.
+ * XXX: The array DOES NOT OWN the materials, they belong to the map!!!
+ * The material ID is determined by the lexicographical sort of the material's name.
+ * This function edits the material's ID in the materials map to match the one of the array.
+ */
+materials_map_to_array :: proc(materials_map: ^map[string]WavefrontMaterial) -> []^WavefrontMaterial {
+	materials_array := make([]^WavefrontMaterial, len(materials_map))
 
-	i := 0
-	for key, &material in materials {
-		output_array[i] = material
+	i :u32 = 0
+	for key, &material in materials_map {
+		materials_array[i] = &material
 		i += 1
 	}
-	compare := proc(a, b: WavefrontMaterial) -> bool {
+	compare := proc(a, b: ^WavefrontMaterial) -> bool {
 		return a.name < b.name
 	}
-	slice.sort_by(output_array, compare)
-	return output_array
+	slice.sort_by(materials_array, compare)
+	for i = 0; i < cast(u32)len(materials_array); i += 1 {
+		materials_array[i].index = i
+	}
+	return materials_array
+}
+
+GlIndexBufferRange :: struct {
+	begin: uintptr,
+	length: i32,
+	material_index: u32,
+}
+
+ModelVerticesAndIndexes :: struct {
+	vertex_buffer: []VertexData,
+	index_buffer: []u32,
+	index_ranges: []GlIndexBufferRange,
 }
 
 /*
@@ -221,10 +234,16 @@ materials_map_to_array :: proc(materials: map[string]WavefrontMaterial) -> []Wav
  * used by OpenGL to draw them.
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
-obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []WavefrontMaterial) -> (vertex_buffer_: []VertexData, index_buffer_: []u32) {
+obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> ModelVerticesAndIndexes {
 	// Pre-allocate enough memory for the maximum amount of vertices
 	vertex_buffer := make([dynamic]VertexData, 0, len(obj_data.vertex_indices))
-	index_buffer := make([dynamic]u32, 0, len(obj_data.vertex_indices))
+	// I'm sorting the index buffer by the material ID, which allows me to render each material with
+	// a different Draw call. I use this temporary 2D array for the occasion.
+	index_buffers_by_material := make([dynamic][dynamic]u32, len(materials))
+	defer {
+		for buffer in index_buffers_by_material do delete(buffer)
+		delete(index_buffers_by_material)
+	}
 
 	/*
 	 * Preface/REMINDER: A VERTEX IS NOT JUST A POSITION. The vertex's position is only one of its ATTRIBUTES.
@@ -245,25 +264,46 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: []Wave
 
 	for i in 0..<len(obj_data.vertex_indices) {
 		vertex_identity := obj_data.vertex_indices[i]
+		material_index := materials[vertex_identity.material].index
 
 		if !(vertex_identity in vertex_ebo_locations) {
 			// This vertex is still unique, insert it
 			vertex_index := u32(len(vertex_buffer))
 			vertex_ebo_locations[vertex_identity] = vertex_index
-			append_vertex_in_vertex_buffer(obj_data, materials, &vertex_buffer, vertex_identity)
-			append(&index_buffer, vertex_index)
+			append_vertex_in_vertex_buffer(obj_data, material_index, &vertex_buffer, vertex_identity)
+			append(&index_buffers_by_material[material_index], vertex_index)
 		}
 		else {
 			// This vertex has been seen before, just push its index in the index buffer.
 			vertex_index := vertex_ebo_locations[vertex_identity]
-			append(&index_buffer, vertex_index)
+			append(&index_buffers_by_material[material_index], vertex_index)
 		}
+	}
+
+	index_buffer := make([dynamic]u32, 0, len(obj_data.vertex_indices))
+	// One index range per material
+	index_ranges := make([dynamic]GlIndexBufferRange, 0, len(materials))
+	for indexes, i in index_buffers_by_material {
+		if len(indexes) == 0 {
+			continue
+		}
+		append(&index_ranges, GlIndexBufferRange{
+			begin = uintptr(len(index_buffer)),
+			length = i32(len(indexes)),
+			material_index = u32(i)
+		})
+		append(&index_buffer, ..indexes[:])
 	}
 
 	// Release unused memory if any (due to de-duplicated vertices)
 	shrink(&vertex_buffer)
 	shrink(&index_buffer)
-	return vertex_buffer[:], index_buffer[:]
+	shrink(&index_ranges)
+	return ModelVerticesAndIndexes{
+		vertex_buffer[:],
+		index_buffer[:],
+		index_ranges[:]
+	}
 }
 
 GlModel :: struct {
@@ -272,22 +312,25 @@ GlModel :: struct {
 	vbo_len: i32,
 	ebo: u32, // Also known as IBO?
 	ebo_len: i32,
+	index_ranges: []GlIndexBufferRange,
 }
 
-obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: []WavefrontMaterial) -> (gl_model: GlModel) {
-	vertex_buffer, index_buffer := obj_data_to_vertex_buffer(obj_data, materials)
+obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel) {
+	buffers := obj_data_to_vertex_buffer(obj_data, materials)
+	// vertex_buffer, index_buffer, foo := obj_data_to_vertex_buffer(obj_data, materials)
 	defer {
 		// Once those are sent to the GPU memory, we can release them from CPU RAM
-		delete(vertex_buffer)
-		delete(index_buffer)
+		delete(buffers.vertex_buffer)
+		delete(buffers.index_buffer)
 	}
 	// TODO: New (openGL 4.5+) method of doing this?
 	// https://github.com/fendevel/Guide-to-Modern-OpenGL-Functions?tab=readme-ov-file#glbuffer
 	// https://www.reddit.com/r/opengl/comments/18rkgg3/one_vao_for_multiple_vbos/
 	// TODO: Error handling if anything below this comment fails. Painful. Fuck OpenGL function signatures.
 
-	gl_model.vbo_len = i32(len(vertex_buffer))
-	gl_model.ebo_len = i32(len(index_buffer))
+	gl_model.vbo_len = i32(len(buffers.vertex_buffer))
+	gl_model.ebo_len = i32(len(buffers.index_buffer))
+	gl_model.index_ranges = buffers.index_ranges
 
 	// Generate buffers for VAO, VBO and EBO
 	gl.GenVertexArrays(1, &gl_model.vao)
@@ -299,8 +342,8 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: []Wavefro
 
 	// Copy vertex data to GPU buffer object
 	gl.BindBuffer(gl.ARRAY_BUFFER, gl_model.vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertex_buffer) * size_of(vertex_buffer[0]),
-		raw_data(vertex_buffer), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, len(buffers.vertex_buffer) * size_of(buffers.vertex_buffer[0]),
+		raw_data(buffers.vertex_buffer), gl.STATIC_DRAW)
 
 	// Enable & specify vertex attributes for VBO
 	gl.EnableVertexAttribArray(0)
@@ -308,15 +351,15 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: []Wavefro
 	gl.EnableVertexAttribArray(2)
 	gl.EnableVertexAttribArray(3)
 
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), 0)
-	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, uv))
-	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(vertex_buffer[0]), offset_of(VertexData, material_idx))
-	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(vertex_buffer[0]), offset_of(VertexData, norm))
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), 0)
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, uv))
+	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, material_idx))
+	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, norm))
 
 	// Bind VAO to EBO and fill it with needed indices
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_model.ebo)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(index_buffer) * size_of(index_buffer[0]),
-		raw_data(index_buffer), gl.STATIC_DRAW)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(buffers.index_buffer) * size_of(buffers.index_buffer[0]),
+		raw_data(buffers.index_buffer), gl.STATIC_DRAW)
 
 	gl.BindVertexArray(0)
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
@@ -337,7 +380,7 @@ MaterialData :: struct #packed {
 	illum: IlluminationModel "Illumination model",
 }
 
-wavefront_materials_to_uniform_buffer :: proc(materials: []WavefrontMaterial) -> []MaterialData {
+wavefront_materials_to_uniform_buffer :: proc(materials: []^WavefrontMaterial) -> []MaterialData {
 	gl_buffer := make([]MaterialData, len(materials))
 	for material, idx in materials {
 		gl_buffer[idx] = MaterialData{

@@ -166,19 +166,20 @@ main :: proc() {
 		for id in shader_programs do gl.DeleteProgram(id)
 	}
 
-	materials_array := materials_map_to_array(materials)
+	materials_array := materials_map_to_array(&materials)
 	defer delete(materials_array)
 	for m, idx in materials_array {
 		fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
 	}
 
 	// === LOAD MAIN MODEL ===
-	main_model: GlModel = obj_data_to_gl_objects(&obj_data, materials_array)
+	main_model: GlModel = obj_data_to_gl_objects(&obj_data, materials)
 	assert(main_model.vao != 0 && main_model.vbo != 0 && main_model.ebo != 0)
 	defer {
 		gl.DeleteVertexArrays(1, &main_model.vao)
 		gl.DeleteBuffers(1, &main_model.vbo)
 		gl.DeleteBuffers(1, &main_model.ebo)
+		delete(main_model.index_ranges)
 	}
 
 	// === LOAD LIGHT CUBE ===
@@ -259,7 +260,18 @@ main :: proc() {
 		set_shader_uniform(shader_programs[state.shader_program], "mvp", &mvp_matrix)
 
 		gl.BindVertexArray(main_model.vao)
-		gl.DrawElements(gl.TRIANGLES, main_model.ebo_len, gl.UNSIGNED_INT, nil)
+
+		// TODO: Measure performance impact of these two methods
+		// OLD WAY: DRAW EVERYTHING
+		// gl.DrawElements(gl.TRIANGLES, main_model.ebo_len, gl.UNSIGNED_INT, nil)
+
+		// NEW WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
+		for range in main_model.index_ranges {
+			if materials_array[range.material_index].Tr > 0.0 {
+				continue
+			}
+			gl.DrawElements(gl.TRIANGLES, range.length, gl.UNSIGNED_INT, rawptr(range.begin * size_of(u32)))
+		}
 
 		// === VISUALIZE VERTEX NORMAL VECTORS ===
 		if state.enable_normals_view {
