@@ -136,9 +136,11 @@ main :: proc() {
 	model_offset := get_model_offset_matrix(obj_data)
 	state.camera.pos = get_initial_camera_pos(obj_data)
 	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
-	state.light_source_pos = state.camera.pos
-	state.light_source_pos.z *= 2
-	state.light_source_pos.y = -state.light_source_pos.z
+	state.light_source_pos = Vec3f{
+		-state.camera.pos.z * 2,
+		-state.camera.pos.z * 2,
+		0,
+	}
 
 	// === INIT OPENGL ===
 	window, opengl_ok := init_OpenGL()
@@ -292,8 +294,10 @@ main :: proc() {
 		// === DRAW LIGHT CUBE ===
 		gl.UseProgram(shader_programs[.LightSource])
 
+		cube_model_matrix := get_light_cube_model_matrix(state.light_source_pos, f32(time))
 		set_shader_uniform(shader_programs[.LightSource], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[.LightSource], "light_color", &Vec3f{1, 1, 1})
+		set_shader_uniform(shader_programs[.LightSource], "model", &cube_model_matrix)
 		set_shader_uniform(shader_programs[.LightSource], "view", &state.camera.mat)
 		set_shader_uniform(shader_programs[.LightSource], "projection", &proj_matrix)
 
@@ -338,15 +342,10 @@ get_model_offset_matrix :: proc(model: WavefrontObjFile) -> Mat4f {
 	return offset_mat
 }
 
-get_light_cube_model_matrix :: proc(main_obj_model: WavefrontObjFile) -> (cube_model_matrix: Mat4f) {
-	light_pos := get_initial_camera_pos(main_obj_model)
-	light_pos.z *= 2
-	light_pos.y = light_pos.z
-
+get_light_cube_model_matrix :: proc(cube_position: Vec3f, time: f32) -> (cube_model_matrix: Mat4f) {
 	cube_model_matrix = UNIT_MAT4F
-	cube_model_matrix[3][1] = -light_pos.y
-	cube_model_matrix[3][2] = light_pos.z
-	return
+	cube_model_matrix[3].xyz = cube_position
+	return cube_model_matrix * get_rotation_matrix4_x_axis(time) * get_rotation_matrix4_y_axis(time)
 }
 
 create_light_source :: proc() -> (light_vao, light_vbo: u32) {
