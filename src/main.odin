@@ -343,49 +343,49 @@ get_light_cube_model_matrix :: proc(main_obj_model: WavefrontObjFile) -> (cube_m
 
 create_light_source :: proc() -> (light_vao, light_vbo: u32) {
 	cube_vertices := [?]f32{
-    // Back face
-    -0.5, -0.5, -0.5, // Bottom-left
-     0.5, -0.5, -0.5, // bottom-right
-     0.5,  0.5, -0.5, // top-right
-     0.5,  0.5, -0.5, // top-right
-    -0.5,  0.5, -0.5, // top-left
-    -0.5, -0.5, -0.5, // bottom-left
-    // Front face
-    -0.5, -0.5,  0.5, // bottom-left
-     0.5,  0.5,  0.5, // top-right
-     0.5, -0.5,  0.5, // bottom-right
-     0.5,  0.5,  0.5, // top-right
-    -0.5, -0.5,  0.5, // bottom-left
-    -0.5,  0.5,  0.5, // top-left
-    // Left face
-    -0.5,  0.5,  0.5, // top-right
-    -0.5, -0.5, -0.5, // bottom-left
-    -0.5,  0.5, -0.5, // top-left
-    -0.5, -0.5, -0.5, // bottom-left
-    -0.5,  0.5,  0.5, // top-right
-    -0.5, -0.5,  0.5, // bottom-right
-    // Right face
-     0.5,  0.5,  0.5, // top-left
-     0.5,  0.5, -0.5, // top-right
-     0.5, -0.5, -0.5, // bottom-right
-     0.5, -0.5, -0.5, // bottom-right
-     0.5, -0.5,  0.5, // bottom-left
-     0.5,  0.5,  0.5, // top-left
-    // Bottom face
-    -0.5, -0.5, -0.5, // top-right
-     0.5, -0.5,  0.5, // bottom-left
-     0.5, -0.5, -0.5, // top-left
-     0.5, -0.5,  0.5, // bottom-left
-    -0.5, -0.5, -0.5, // top-right
-    -0.5, -0.5,  0.5, // bottom-right
-    // Top face
-    -0.5,  0.5, -0.5, // top-left
-     0.5,  0.5, -0.5, // top-right
-     0.5,  0.5,  0.5, // bottom-right
-     0.5,  0.5,  0.5, // bottom-right
-    -0.5,  0.5,  0.5, // bottom-left
-    -0.5,  0.5, -0.5  // top-left
-    }
+		// Back face
+		-0.5, -0.5, -0.5, // Bottom-left
+		0.5, -0.5, -0.5, // bottom-right
+		0.5,  0.5, -0.5, // top-right
+		0.5,  0.5, -0.5, // top-right
+		-0.5,  0.5, -0.5, // top-left
+		-0.5, -0.5, -0.5, // bottom-left
+		// Front face
+		-0.5, -0.5,  0.5, // bottom-left
+		0.5,  0.5,  0.5, // top-right
+		0.5, -0.5,  0.5, // bottom-right
+		0.5,  0.5,  0.5, // top-right
+		-0.5, -0.5,  0.5, // bottom-left
+		-0.5,  0.5,  0.5, // top-left
+		// Left face
+		-0.5,  0.5,  0.5, // top-right
+		-0.5, -0.5, -0.5, // bottom-left
+		-0.5,  0.5, -0.5, // top-left
+		-0.5, -0.5, -0.5, // bottom-left
+		-0.5,  0.5,  0.5, // top-right
+		-0.5, -0.5,  0.5, // bottom-right
+		// Right face
+		0.5,  0.5,  0.5, // top-left
+		0.5,  0.5, -0.5, // top-right
+		0.5, -0.5, -0.5, // bottom-right
+		0.5, -0.5, -0.5, // bottom-right
+		0.5, -0.5,  0.5, // bottom-left
+		0.5,  0.5,  0.5, // top-left
+		// Bottom face
+		-0.5, -0.5, -0.5, // top-right
+		0.5, -0.5,  0.5, // bottom-left
+		0.5, -0.5, -0.5, // top-left
+		0.5, -0.5,  0.5, // bottom-left
+		-0.5, -0.5, -0.5, // top-right
+		-0.5, -0.5,  0.5, // bottom-right
+		// Top face
+		-0.5,  0.5, -0.5, // top-left
+		0.5,  0.5, -0.5, // top-right
+		0.5,  0.5,  0.5, // bottom-right
+		0.5,  0.5,  0.5, // bottom-right
+		-0.5,  0.5,  0.5, // bottom-left
+		-0.5,  0.5, -0.5  // top-left
+	}
 
 	// TODO: Error checking?
 	gl.GenBuffers(1, &light_vbo)
