@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:mem"
 import "core:mem/virtual"
 import "core:encoding/endian"
+import gl "vendor:OpenGL"
 
 BitmapTexture :: struct {
 	width: i32,
@@ -83,6 +84,113 @@ parse_bmp_texture :: proc(texture_path: string) -> (texture: BitmapTexture, ok: 
 
 	// Looks like you can just pass ownership like that, similar to C pointers
 	texture.data = copied_data
+	ok = true
+	return
+}
+
+GlTexture :: struct {
+	id: u32,
+	width: i32,
+	height: i32,
+}
+
+get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
+	bmp := parse_bmp_texture(texture_path) or_return
+	defer delete_BitmapTexture(bmp)
+
+	// Checks if number is a power of 2. Useful to check for some types of textures/generate mipmaps
+	// is_pow_2 := proc(n: i32) -> bool {
+	// 	return (n & (n - 1)) == 0;
+	// }
+
+	texture.width = bmp.width
+	texture.height = bmp.height
+
+	gl.GenTextures(1, &texture.id)
+	gl.BindTexture(gl.TEXTURE_2D, texture.id)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+	// Copied texture to GPU buffer, we can now free memory here
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, texture.width, texture.height, 0, gl.BGR,
+		gl.UNSIGNED_BYTE, raw_data(bmp.data))
+	gl.GenerateMipmap(gl.TEXTURE_2D)
+
+	// XXX: Unbind texture for next callers?
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+
+	ok = true
+	return
+}
+
+GlTextureID :: distinct u32
+
+GlMaterial :: struct {
+	name: string "Material name",
+	index: u32 "Material index",
+
+	Ka: Vec3f "Ambient color",
+	Kd: Vec3f "Diffuse color",
+	Ks: Vec3f "Specular color",
+	Ns: f32 "Specular exponent",
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dossolve)
+	Tf: Vec3f "Transmission filter color",
+	Ni: f32 "Index of refraction",
+	illum: IlluminationModel "Illumination model",
+
+	// Enum array of texture IDs. If ID is 0, no texture is present.
+	textures: [TextureUnit]GlTextureID,
+}
+
+// Load all mentionned textures in the materials list into the GPU VRAM
+load_texture_data :: proc(materials: map[string]WavefrontMaterial) -> (textures: []GlTexture, gl_materials: []GlMaterial, ok: bool) {
+	BitmapTextureAndMaterialName :: struct {
+		bmp: BitmapTexture,
+		material_name: string,
+	}
+	bitmaps: map[string]BitmapTextureAndMaterialName
+	defer delete(bitmaps)
+
+	for name, mtl in materials {
+		if mtl.texture_paths[.Map_Ka] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_Ka]] = {parse_bmp_texture(mtl.texture_paths[.Map_Ka]) or_return, name}
+		if mtl.texture_paths[.Map_Kd] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_Kd]] = {parse_bmp_texture(mtl.texture_paths[.Map_Kd]) or_return, name}
+		if mtl.texture_paths[.Map_Ks] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_Ks]] = {parse_bmp_texture(mtl.texture_paths[.Map_Ks]) or_return, name}
+		if mtl.texture_paths[.Map_Ns] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_Ns]] = {parse_bmp_texture(mtl.texture_paths[.Map_Ns]) or_return, name}
+		if mtl.texture_paths[.Map_d] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_d]] = {parse_bmp_texture(mtl.texture_paths[.Map_d]) or_return, name}
+		if mtl.texture_paths[.Map_bump] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_bump]] = {parse_bmp_texture(mtl.texture_paths[.Map_bump]) or_return, name}
+		if mtl.texture_paths[.Map_disp] not_in bitmaps do bitmaps[mtl.texture_paths[.Map_disp]] = {parse_bmp_texture(mtl.texture_paths[.Map_disp]) or_return, name}
+		if mtl.texture_paths[.Decal] not_in bitmaps do bitmaps[mtl.texture_paths[.Decal]] = {parse_bmp_texture(mtl.texture_paths[.Decal]) or_return, name}
+	}
+
+	textures = make([]GlTexture, len(bitmaps))
+	texture_IDs := make([]u32, len(bitmaps))
+	defer delete(texture_IDs)
+
+	gl.GenTextures(i32(len(bitmaps)), raw_data(texture_IDs))
+
+	i :u32 = 0
+	for _, &bitmap in bitmaps {
+		textures[i].id = texture_IDs[i]
+		gl.BindTexture(gl.TEXTURE_2D, textures[i].id)
+		// Texture parameters
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		// Transfer texture to GPU
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, textures[i].width, textures[i].height, 0, gl.BGR,
+			gl.UNSIGNED_BYTE, raw_data(bitmap.bmp.data))
+		gl.GenerateMipmap(gl.TEXTURE_2D)
+
+		assert(bitmap.material_name in materials)
+		current_material := &materials[bitmap.material_name]
+		// TODO: Create another material struct that represents a GL material with texture IDs
+		// instead of texture paths, and return that struct to be used.
+		i += 1
+	}
 	ok = true
 	return
 }

@@ -9,6 +9,7 @@ import "core:fmt"
 import "core:strconv"
 import "core:path/filepath"
 import "core:encoding/ansi"
+import "core:container/rbtree"
 import clang "core:c"
 
 Vec2f :: [2]f32
@@ -40,6 +41,17 @@ IlluminationModel :: enum u32 {
 	CastsShadowOntoInvisibleSurfaces,
 }
 
+TextureUnit :: enum {
+	Map_Ka,
+	Map_Kd,
+	Map_Ks,
+	Map_Ns,
+	Map_d,
+	Map_bump,
+	Map_disp,
+	Decal,
+}
+
 WavefrontMaterial :: struct {
 	name: string "Material name",
 	index: u32 "Material index",
@@ -53,27 +65,20 @@ WavefrontMaterial :: struct {
 	Ni: f32 "Index of refraction",
 	illum: IlluminationModel "Illumination model",
 
-	map_Ka: string "Ambient texture map",
-	map_Kd: string "Diffuse texture map",
-	map_Ks: string "Specular color texture map",
-	map_Ns: string "Specular exponent texture map",
-	map_d: string "Alpha texture map",
-	map_bump: string "Bump map",
-	map_disp: string "Displacement map",
-	decal: string "Stencil decal texture",
+	texture_paths: [TextureUnit]string,
 }
 
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
 	delete(mtl.name)
-	delete(mtl.map_Ka)
-	delete(mtl.map_Kd)
-	delete(mtl.map_Ks)
-	delete(mtl.map_Ns)
-	delete(mtl.map_d)
-	delete(mtl.map_bump)
-	delete(mtl.map_disp)
-	delete(mtl.decal)
+	delete(mtl.texture_paths[.Map_Ka])
+	delete(mtl.texture_paths[.Map_Kd])
+	delete(mtl.texture_paths[.Map_Ks])
+	delete(mtl.texture_paths[.Map_Ns])
+	delete(mtl.texture_paths[.Map_d])
+	delete(mtl.texture_paths[.Map_bump])
+	delete(mtl.texture_paths[.Map_disp])
+	delete(mtl.texture_paths[.Decal])
 }
 
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
@@ -295,7 +300,7 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 		case "d":
 			active_material.d = strconv.parse_f32(split_line[1]) or_else 0.0
 		case "map_Ka":
-			active_material.map_Ka = strings.clone(split_line[1])
+			active_material.texture_paths[.Map_Ka] = strings.clone(split_line[1])
 		// case "map_Kd":
 		// 	active_material.map_Kd = strings.clone(split_line[1])
 		// case "map_Ks":
@@ -372,7 +377,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			// XXX: I could make it so it only stored the name of the material and tries to
 			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
 			// but that might be overkill/beyond the Wavefront spec
-			if !(split_line[1] in materials) {
+			if split_line[1] not_in materials {
 				fmt.printfln(ERROR_RED_TEXT + " line %v: Material `%v' is not found in current materials", line_number, split_line[1])
 				return
 			}

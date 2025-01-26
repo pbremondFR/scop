@@ -173,11 +173,11 @@ main :: proc() {
 		for id in shader_programs do gl.DeleteProgram(id)
 	}
 
-	materials_array := materials_map_to_array(&materials)
-	defer delete(materials_array)
-	for m, idx in materials_array {
-		fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
-	}
+	// materials_array := materials_map_to_array(&materials)
+	// defer delete(materials_array)
+	// for m, idx in materials_array {
+	// 	fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
+	// }
 
 	// === LOAD MAIN MODEL ===
 	main_model: GlModel = obj_data_to_gl_objects(&obj_data, materials)

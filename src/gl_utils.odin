@@ -111,44 +111,6 @@ get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, ge
 	return
 }
 
-GlTexture :: struct {
-	id: u32,
-	width: i32,
-	height: i32,
-}
-
-get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
-	bmp := parse_bmp_texture(texture_path) or_return
-	defer delete_BitmapTexture(bmp)
-
-	// Checks if number is a power of 2. Useful to check for some types of textures/generate mipmaps
-	// is_pow_2 := proc(n: i32) -> bool {
-	// 	return (n & (n - 1)) == 0;
-	// }
-
-	texture.width = bmp.width
-	texture.height = bmp.height
-
-	gl.GenTextures(1, &texture.id)
-	gl.BindTexture(gl.TEXTURE_2D, texture.id)
-
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-	// Copied texture to GPU buffer, we can now free memory here
-	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, texture.width, texture.height, 0, gl.BGR,
-		gl.UNSIGNED_BYTE, raw_data(bmp.data))
-	gl.GenerateMipmap(gl.TEXTURE_2D)
-
-	// XXX: Unbind texture for next callers?
-	gl.BindTexture(gl.TEXTURE_2D, 0)
-
-	ok = true
-	return
-}
-
 VertexData :: struct #packed {
 	pos: Vec3f "pos",
 	uv: Vec2f "uv",
@@ -378,6 +340,7 @@ MaterialData :: struct #packed {
 	Ni: f32 "Index of refraction",
 	Tf: Vec3f "Transmission filter color",
 	illum: IlluminationModel "Illumination model",
+	// TODO: Enabled textures as a bitfield?
 }
 
 wavefront_materials_to_uniform_buffer :: proc(materials: []^WavefrontMaterial) -> []MaterialData {
