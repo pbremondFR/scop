@@ -4,12 +4,16 @@ newmtl mat0
 Ns 0
 Ka 1.0 1.0 1.0
 Kd 1 1 1
-Ks 0.5 0.5 0.5
+# FIXME: Specular is fucked up with this kind of conversion, need to handle specular map
+# The vertex normals are fucked in this case, so...
+# HACK: Set Ks to zero vector to disable speculars entirely
+# Ks 0.5 0.5 0.5
+Ks 0 0 0
 Ke 0.0 0.0 0.0
 Ni 1.0
 d 1
 illum 2
-# map_Kd Rafale-airframe_baseColor.png
+map_Ka Rafale-airframe_baseColor.bmp
 map_Kd Rafale-airframe_baseColor.bmp
 # map_Ns Rafale-airframe_metallicRoughness.png
 # refl Rafale-airframe_metallicRoughness.png

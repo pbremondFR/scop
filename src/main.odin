@@ -83,7 +83,7 @@ State :: struct {
 state := State{
 	window_size = {1024, 1024},
 	fov = math.to_radians_f32(70.0),
-	shader_program = .FaceNormals,
+	shader_program = .DefaultShader,
 	normals_view_length = 1.0,
 }
 
@@ -206,6 +206,16 @@ main :: proc() {
 		for _, &material in gl_materials do delete(material.name)
 		delete(gl_materials)
 	}
+	gl.UseProgram(shader_programs[.DefaultShader])
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_Ka", i32(TextureUnit.Map_Ka))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_Kd", i32(TextureUnit.Map_Kd))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_Ks", i32(TextureUnit.Map_Ks))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_Ns", i32(TextureUnit.Map_Ns))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_d", i32(TextureUnit.Map_d))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_bump", i32(TextureUnit.Map_bump))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_disp", i32(TextureUnit.Map_disp))
+	set_shader_uniform(shader_programs[.DefaultShader], "texture_decal", i32(TextureUnit.Decal))
+	gl.UseProgram(shader_programs[state.shader_program])
 
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo: u32
@@ -281,6 +291,9 @@ main :: proc() {
 			for _, &material in gl_materials {
 				if material.index == range.material_index {
 					for unit in TextureUnit {
+						if material.textures[unit] == 0 {
+							continue
+						}
 						gl.ActiveTexture(gl.TEXTURE0 + u32(unit))
 						gl.BindTexture(gl.TEXTURE_2D, u32(material.textures[unit]))
 					}

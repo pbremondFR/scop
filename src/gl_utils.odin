@@ -328,7 +328,6 @@ gl_materials_to_uniform_buffer :: proc(gl_materials: map[string]GlMaterial) -> [
 		for texture_unit in TextureUnit {
 			textures_flags |= u32(material.textures[texture_unit] != 0) << u32(texture_unit)
 		}
-		fmt.printfln("Textures: %x", textures_flags)
 		data := GlUniformMaterialData{
 			Ka = material.Ka,
 			Kd = material.Kd,
@@ -350,6 +349,7 @@ set_shader_uniform :: proc{
 	set_shader_uniform_mat4f,
 	set_shader_uniform_vec3f,
 	set_shader_uniform_f32,
+	set_shader_uniform_i32,
 }
 
 set_shader_uniform_mat4f :: proc(shader_program: u32, uniform_name: string, mat: ^Mat4f) {
@@ -366,4 +366,9 @@ set_shader_uniform_vec3f :: proc(shader_program: u32, uniform_name: string, vec:
 set_shader_uniform_f32 :: proc(shader_program: u32, uniform_name: string, value: f32) {
 	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
 	gl.Uniform1f(uniform_location, value)
+}
+
+set_shader_uniform_i32 :: proc(shader_program: u32, uniform_name: string, value: i32) {
+	uniform_location := gl.GetUniformLocation(shader_program, strings.unsafe_string_to_cstring(uniform_name))
+	gl.Uniform1i(uniform_location, value)
 }
