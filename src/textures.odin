@@ -9,6 +9,10 @@ import "core:strings"
 import "core:path/filepath"
 import "base:runtime"
 import gl "vendor:OpenGL"
+// TODO: Somehow conditionnaly import with feature flag, define, or something like that
+import "core:image/png"
+import "core:image/bmp"
+import "core:image"
 
 BitmapTexture :: struct {
 	width: i32,
@@ -43,9 +47,50 @@ get_i32le :: #force_inline proc "contextless" (data: []byte) -> i32 {
 }
 /* ================================================================ */
 
+/*
+ * For bonuses and testing purposes, as I'm using Odin's standard library to be able to load PNGs
+ * in addition to BMPs.
+ */
+parse_any_texture_bonus :: proc(texture_path: string) -> (texture: BitmapTexture, ok: bool) {
+	img, load_err := image.load_from_file(texture_path)
+	if load_err == .Unable_To_Read_File {
+		// Load "missing" texture
+		img, load_err = image.load_from_file("resources/pbremond.bmp")
+	}
+	if load_err != nil {
+		fmt.printfln("Failed to load texture `%v': %v", texture_path, load_err)
+		return
+	}
+	defer image.destroy(img)
+
+	texture.data = make([]byte, len(img.pixels.buf))
+	image.alpha_drop_if_present(img)
+
+	num_pixels := len(img.pixels.buf) / 3
+	assert(num_pixels == img.width * img.height)
+
+	for i in 0..<img.height {
+		dest := mem.ptr_offset(raw_data(texture.data), img.width * 3 * (img.height - i))
+		src := mem.ptr_offset(raw_data(img.pixels.buf), img.width * 3 * i)
+		mem.copy_non_overlapping(dest, src, img.width * 3)
+	}
+
+	texture.width = i32(img.width)
+	texture.height = i32(img.height)
+	texture.bpp = 32
+	ok = true
+	return
+}
 
 parse_bmp_texture :: proc(texture_path: string) -> (texture: BitmapTexture, ok: bool) {
+	if !strings.ends_with(texture_path, ".bmp") && !strings.ends_with(texture_path, ".dib") {
+		fmt.printfln("`%v': Only Windows Bitmap files are allowed", texture_path)
+		return
+	}
 	file_contents, map_err := virtual.map_file_from_path(texture_path, {.Read})
+	if map_err != nil {
+		file_contents, map_err = virtual.map_file_from_path("resources/pbremond.bmp", {.Read})
+	}
 	if map_err != nil {
 		fmt.printfln("Failed to open `%v`: %v", texture_path, map_err);
 		return
@@ -97,6 +142,9 @@ GlTexture :: struct {
 	height: i32,
 }
 
+/*
+ * Get a single OpenGL texture (just an identifier with width & height info) from a texture path. Only accepts BMP.
+ */
 get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 	bmp := parse_bmp_texture(texture_path) or_return
 	defer delete_BitmapTexture(bmp)
@@ -122,7 +170,6 @@ get_gl_texture :: proc(texture_path: string) -> (texture: GlTexture, ok: bool) {
 		gl.UNSIGNED_BYTE, raw_data(bmp.data))
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
-	// XXX: Unbind texture for next callers?
 	gl.BindTexture(gl.TEXTURE_2D, 0)
 
 	ok = true
@@ -175,7 +222,9 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 			}
 			full_file_path := filepath.join({root_dir, mtl.texture_paths[texture_unit]}, context.temp_allocator)
 			bitmaps[mtl.texture_paths[texture_unit]] = {
-				parse_bmp_texture(full_file_path) or_return,
+				// TODO: ONLY FOR BONUSES!!!!!
+				// parse_bmp_texture(full_file_path) or_return,
+				parse_any_texture_bonus(full_file_path) or_return,
 				0
 			}
 		}
@@ -195,7 +244,7 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		// Transfer texture to GPU
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, bitmap.bmp.width, bitmap.bmp.height, 0, gl.BGR,
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, bitmap.bmp.width, bitmap.bmp.height, 0, gl.RGB,
 			gl.UNSIGNED_BYTE, raw_data(bitmap.bmp.data))
 		gl.GenerateMipmap(gl.TEXTURE_2D)
 		gl.BindTexture(gl.TEXTURE_2D, 0)

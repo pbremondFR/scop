@@ -380,15 +380,10 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		}
 	}
 
-	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices",
-		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices))
+	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices\n=== %v materials",
+		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices), len(materials))
 
-	if len(materials) > MAX_MATERIALS {
-		// Print limit as MAX_MATERIALS - 1 because there is always our own default material
-		fmt.printfln("Error: Too many materials! Limit is %v", MAX_MATERIALS - 1)
-		return
-	}
-	else if len(materials) == 0 {
+	if len(materials) == 0 {
 		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	}
 
