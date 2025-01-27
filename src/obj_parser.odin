@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:strconv"
 import "core:path/filepath"
 import "core:encoding/ansi"
-import "core:container/rbtree"
+import "core:slice"
 import clang "core:c"
 
 Vec2f :: [2]f32
@@ -41,7 +41,7 @@ IlluminationModel :: enum u32 {
 	CastsShadowOntoInvisibleSurfaces,
 }
 
-TextureUnit :: enum {
+TextureUnit :: enum u32 {
 	Map_Ka,
 	Map_Kd,
 	Map_Ks,
@@ -71,14 +71,9 @@ WavefrontMaterial :: struct {
 delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 	// TODO: delete strings of maps if I ever get around to implementing that
 	delete(mtl.name)
-	delete(mtl.texture_paths[.Map_Ka])
-	delete(mtl.texture_paths[.Map_Kd])
-	delete(mtl.texture_paths[.Map_Ks])
-	delete(mtl.texture_paths[.Map_Ns])
-	delete(mtl.texture_paths[.Map_d])
-	delete(mtl.texture_paths[.Map_bump])
-	delete(mtl.texture_paths[.Map_disp])
-	delete(mtl.texture_paths[.Decal])
+	for path in mtl.texture_paths {
+		delete(path)
+	}
 }
 
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
@@ -244,8 +239,6 @@ ERROR_RED_TEXT :: ansi.CSI + ansi.FG_RED + ansi.SGR + "ERROR:" + ansi.CSI + ansi
 NOTE_BLUE_TEXT ::ansi.CSI + ansi.FG_BLUE + ansi.SGR + "NOTE:" + ansi.CSI + ansi.RESET + ansi.SGR
 
 parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
-	using virtual.Map_File_Flag
-
 	mtl_file_path := filepath.join({working_dir, mtl_file_name})
 	defer delete(mtl_file_path)
 
@@ -301,10 +294,10 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 			active_material.d = strconv.parse_f32(split_line[1]) or_else 0.0
 		case "map_Ka":
 			active_material.texture_paths[.Map_Ka] = strings.clone(split_line[1])
-		// case "map_Kd":
-		// 	active_material.map_Kd = strings.clone(split_line[1])
-		// case "map_Ks":
-		// 	active_material.map_Ks = strings.clone(split_line[1])
+		case "map_Kd":
+			active_material.texture_paths[.Map_Kd] = strings.clone(split_line[1])
+		case "map_Ks":
+			active_material.texture_paths[.Map_Ks] = strings.clone(split_line[1])
 		// case "map_Ns":
 		// 	active_material.map_Ns = strings.clone(split_line[1])
 		// case "map_d":
@@ -399,6 +392,39 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	}
 
+	// Transfers ownership of materials from map to array
+	// materials_array = consume_materials_map_to_array(&materials)
+	index: u32 = 0
+	for name, &mtl in materials {
+		mtl.index = index
+		index += 1
+	}
 	ok = true
 	return
+}
+
+/*
+ * Create an array containing all materials, and sets their ID according to lexicographical order
+ * of the material names. The array is sorted according to the material ID.
+ * This function consumes the material map and clears its contents. The ownership of the WavefrontMaterial
+ * structure is passed to the array.
+ */
+ @(private="file")
+consume_materials_map_to_array :: proc(materials_map: ^map[string]WavefrontMaterial) -> []WavefrontMaterial {
+	materials_array := make([]WavefrontMaterial, len(materials_map))
+
+	i :u32 = 0
+	for key, &material in materials_map {
+		materials_array[i] = material
+		i += 1
+	}
+	compare := proc(a, b: WavefrontMaterial) -> bool {
+		return a.name < b.name
+	}
+	slice.sort_by(materials_array, compare)
+	for i = 0; i < cast(u32)len(materials_array); i += 1 {
+		materials_array[i].index = i
+	}
+	clear(materials_map)
+	return materials_array
 }

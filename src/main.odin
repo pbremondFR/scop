@@ -38,6 +38,7 @@ import "base:runtime"
 import "core:os"
 import "core:math/linalg"
 import "core:math"
+import "core:path/filepath"
 
 // You can set constants with ::
 WINDOW_NAME :: "ft_scop"
@@ -121,12 +122,12 @@ main :: proc() {
 	// Get desired .obj file from program arguments. main() doesn't take args,
 	// it's more like in Python with os.args
 	file_path := os.args[1]
-	obj_data, materials, obj_ok := parse_obj_file(file_path)
+	obj_data, mtl_materials, obj_ok := parse_obj_file(file_path)
 	// XXX: These defer calls are fine even in case of error
 	defer {
 		delete_ObjFileData(obj_data)
-		for key, &mtl in materials do delete_WavefrontMaterial(mtl)
-		delete(materials)
+		for _, &mtl in mtl_materials do delete_WavefrontMaterial(mtl)
+		delete(mtl_materials)
 	}
 	if !obj_ok {
 		fmt.printfln("Failed to load `%v`", file_path)
@@ -158,7 +159,7 @@ main :: proc() {
 		.VertNormals		= get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
 		.Texture			= get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
 		.RawMaterial		= get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
-		.DefaultShader		= get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
+		.DefaultShader		= get_shader_program("shaders/vertex.vert", "shaders/default.frag") or_else 0,
 		.TransparencyShader	= get_shader_program("shaders/vertex.vert", "shaders/transparency.frag") or_else 0,
 		.VertNormVectors	= get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
 		.LightSource		= get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
@@ -173,14 +174,8 @@ main :: proc() {
 		for id in shader_programs do gl.DeleteProgram(id)
 	}
 
-	// materials_array := materials_map_to_array(&materials)
-	// defer delete(materials_array)
-	// for m, idx in materials_array {
-	// 	fmt.printfln("=======\nMaterial %v (%v):\nKa: %v\nKd: %v\nKs: %v / Ns: %v\n", m.name, idx, m.Ka, m.Kd, m.Ks, m.Ns)
-	// }
-
 	// === LOAD MAIN MODEL ===
-	main_model: GlModel = obj_data_to_gl_objects(&obj_data, materials)
+	main_model: GlModel = obj_data_to_gl_objects(&obj_data, mtl_materials)
 	assert(main_model.vao != 0 && main_model.vbo != 0 && main_model.ebo != 0)
 	defer {
 		gl.DeleteVertexArrays(1, &main_model.vao)
@@ -197,25 +192,31 @@ main :: proc() {
 		gl.DeleteBuffers(1, &light_vbo)
 	}
 
+	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL
+	wavefront_root_dir := filepath.dir(os.args[1])
+	defer delete(wavefront_root_dir)
+	gl_textures, gl_materials, textures_ok := load_textures_from_wavefront_materials(mtl_materials, wavefront_root_dir)
+	if !textures_ok {
+		fmt.println("Error loading textures")
+		return
+	}
+	defer {
+		gl.DeleteTextures(i32(len(gl_textures)), cast([^]u32)&gl_textures)
+		delete(gl_textures)
+		for _, &material in gl_materials do delete(material.name)
+		delete(gl_materials)
+	}
+
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo: u32
 	gl.GenBuffers(1, &ubo)
 	gl.BindBuffer(gl.UNIFORM_BUFFER, ubo)
-	uniform_buffer_data := wavefront_materials_to_uniform_buffer(materials_array)
+	uniform_buffer_data := gl_materials_to_uniform_buffer(gl_materials)
 	gl.BufferData(gl.UNIFORM_BUFFER, len(uniform_buffer_data) * size_of(uniform_buffer_data[0]),
 		raw_data(uniform_buffer_data), gl.STATIC_DRAW)
 	gl.BindBuffer(gl.UNIFORM_BUFFER, 0)
 	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
 	delete(uniform_buffer_data)
-
-	// === TEXTURES ===
-	texture, texture_ok := get_gl_texture("resources/Rafale-airframe_baseColor.bmp")
-	// texture, texture_ok := get_gl_texture("resources/uvchecker.bmp")
-	if !texture_ok {
-		fmt.println("Failed to load texture")
-		return
-	}
-	defer gl.DeleteTextures(1, &texture.id)
 
 	// Enable backface culling
 	// gl.Enable(gl.CULL_FACE)
@@ -246,7 +247,7 @@ main :: proc() {
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		gl.BindTexture(gl.TEXTURE_2D, texture.id)
+		// gl.BindTexture(gl.TEXTURE_2D, texture.id)
 		gl.UseProgram(shader_programs[state.shader_program])
 
 		aspect_ratio := f32(state.window_size.x) / f32(state.window_size.y)
@@ -277,9 +278,14 @@ main :: proc() {
 
 		// NEW WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
 		for range in main_model.index_ranges {
-			// if materials_array[range.material_index].Tr > 0.0 {
-			// 	continue
-			// }
+			for _, &material in gl_materials {
+				if material.index == range.material_index {
+					for unit in TextureUnit {
+						gl.ActiveTexture(gl.TEXTURE0 + u32(unit))
+						gl.BindTexture(gl.TEXTURE_2D, u32(material.textures[unit]))
+					}
+				}
+			}
 			gl.DrawElements(gl.TRIANGLES, range.length, gl.UNSIGNED_INT, rawptr(range.begin * size_of(u32)))
 		}
 
@@ -488,7 +494,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	else if key == glfw.KEY_F && action == glfw.PRESS {
 		state.light_source_pos = -state.camera.pos
 	}
-	else if (key >= glfw.KEY_1 && key <= glfw.KEY_5) && action == glfw.PRESS {
+	else if (key >= glfw.KEY_1 && key <= glfw.KEY_6) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
 		fmt.println("Selecting shader", selected_shader)
 		state.shader_program = selected_shader

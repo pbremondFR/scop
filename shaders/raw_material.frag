@@ -8,7 +8,7 @@ struct MaterialProperties{
 	vec3	Ks;
 	float	Ni;
 	vec3	Tf;
-	int		illum;
+	uint	enabled_textures;
 };
 
 layout(std140, binding = 0) uniform uMaterials{

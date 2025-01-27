@@ -9,10 +9,11 @@ Ke 0.0 0.0 0.0
 Ni 1.0
 d 1
 illum 2
-map_Kd Rafale-airframe_baseColor.png
-map_Ns Rafale-airframe_metallicRoughness.png
-refl Rafale-airframe_metallicRoughness.png
-bump Rafale-airframe_normal.png
+# map_Kd Rafale-airframe_baseColor.png
+map_Kd Rafale-airframe_baseColor.bmp
+# map_Ns Rafale-airframe_metallicRoughness.png
+# refl Rafale-airframe_metallicRoughness.png
+# bump Rafale-airframe_normal.png
 
 newmtl mat1
 Ns 1000
@@ -53,4 +54,3 @@ Ke 0.0 0.0 0.0
 Ni 1.0
 d 1
 illum 1
-

@@ -155,30 +155,6 @@ append_vertex_in_vertex_buffer :: proc(
 	append(vertex_buffer, vertex)
 }
 
-/*
- * Create an array containing all materials, sorted by material ID.
- * XXX: The array DOES NOT OWN the materials, they belong to the map!!!
- * The material ID is determined by the lexicographical sort of the material's name.
- * This function edits the material's ID in the materials map to match the one of the array.
- */
-materials_map_to_array :: proc(materials_map: ^map[string]WavefrontMaterial) -> []^WavefrontMaterial {
-	materials_array := make([]^WavefrontMaterial, len(materials_map))
-
-	i :u32 = 0
-	for key, &material in materials_map {
-		materials_array[i] = &material
-		i += 1
-	}
-	compare := proc(a, b: ^WavefrontMaterial) -> bool {
-		return a.name < b.name
-	}
-	slice.sort_by(materials_array, compare)
-	for i = 0; i < cast(u32)len(materials_array); i += 1 {
-		materials_array[i].index = i
-	}
-	return materials_array
-}
-
 GlIndexBufferRange :: struct {
 	begin: uintptr,
 	length: i32,
@@ -228,7 +204,7 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[st
 		vertex_identity := obj_data.vertex_indices[i]
 		material_index := materials[vertex_identity.material].index
 
-		if !(vertex_identity in vertex_ebo_locations) {
+		if vertex_identity not_in vertex_ebo_locations {
 			// This vertex is still unique, insert it
 			vertex_index := u32(len(vertex_buffer))
 			vertex_ebo_locations[vertex_identity] = vertex_index
@@ -331,7 +307,7 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: map[strin
 }
 
 // XXX: Had to reorder members to get rid of padding & be compliant with GLSL std140 layout
-MaterialData :: struct #packed {
+GlUniformMaterialData :: struct #packed {
 	Ka: Vec3f "Ambient color",
 	Ns: f32 "Specular exponent",
 	Kd: Vec3f "Diffuse color",
@@ -339,14 +315,21 @@ MaterialData :: struct #packed {
 	Ks: Vec3f "Specular color",
 	Ni: f32 "Index of refraction",
 	Tf: Vec3f "Transmission filter color",
-	illum: IlluminationModel "Illumination model",
-	// TODO: Enabled textures as a bitfield?
+	// Disable illumination model for now (not used anyway)
+	// illum: IlluminationModel "Illumination model",
+	enabled_textures_flags: u32,
 }
 
-wavefront_materials_to_uniform_buffer :: proc(materials: []^WavefrontMaterial) -> []MaterialData {
-	gl_buffer := make([]MaterialData, len(materials))
-	for material, idx in materials {
-		gl_buffer[idx] = MaterialData{
+gl_materials_to_uniform_buffer :: proc(gl_materials: map[string]GlMaterial) -> []GlUniformMaterialData {
+	gl_buffer := make([]GlUniformMaterialData, len(gl_materials))
+	for _, material in gl_materials {
+		// Set corresponding bit to 1 if texture should be enabled
+		textures_flags: u32 = 0
+		for texture_unit in TextureUnit {
+			textures_flags |= u32(material.textures[texture_unit] != 0) << u32(texture_unit)
+		}
+		fmt.printfln("Textures: %x", textures_flags)
+		data := GlUniformMaterialData{
 			Ka = material.Ka,
 			Kd = material.Kd,
 			Ks = material.Ks,
@@ -354,9 +337,12 @@ wavefront_materials_to_uniform_buffer :: proc(materials: []^WavefrontMaterial) -
 			d = material.d,
 			Tf = material.Tf,
 			Ni = material.Ni,
-			illum = material.illum,
+			// illum = material.illum,
+			enabled_textures_flags = textures_flags
 		}
+		gl_buffer[material.index] = data
 	}
+
 	return gl_buffer
 }
 
