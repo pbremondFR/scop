@@ -14,6 +14,19 @@ import "core:image/png"
 import "core:image/bmp"
 import "core:image"
 
+@(private="file")
+get_missing_texture :: proc() -> (texture: BitmapTexture) {
+	missing_texture_bitmap := #load("../resources/pbremond.bmp", []byte)
+
+	texture.data = make([]byte, len(missing_texture_bitmap))
+	mem.copy_non_overlapping(raw_data(texture.data), raw_data(missing_texture_bitmap[:]), len(missing_texture_bitmap))
+	texture.width = 1024
+	texture.height = 1024
+	texture.bpp = 24
+	return
+}
+
+
 BitmapTexture :: struct {
 	width: i32,
 	height: i32,
@@ -53,12 +66,17 @@ get_i32le :: #force_inline proc "contextless" (data: []byte) -> i32 {
  */
 parse_any_texture_bonus :: proc(texture_path: string) -> (texture: BitmapTexture, ok: bool) {
 	img, load_err := image.load_from_file(texture_path)
+	// Only load missing texture if error was I/O related. The implementation returns that instead of
+	// propagating the io.Error, because read_entire_file returns a bool and not an enum.
 	if load_err == .Unable_To_Read_File {
-		// Load "missing" texture
-		img, load_err = image.load_from_file("resources/pbremond.bmp")
+		fmt.printfln(WARNING_YELLOW_TEXT + " Failed to load texture `%v': %v", texture_path, load_err)
+		texture = get_missing_texture()
+		ok = true
+		return
 	}
-	if load_err != nil {
-		fmt.printfln("Failed to load texture `%v': %v", texture_path, load_err)
+	else if load_err != nil {
+		// Other kind of errors make parsing stop, don't fallback on missing texture for this
+		fmt.printfln(ERROR_RED_TEXT + "Failed to load texture `%v': %v", texture_path, load_err)
 		return
 	}
 	defer image.destroy(img)
@@ -69,6 +87,7 @@ parse_any_texture_bonus :: proc(texture_path: string) -> (texture: BitmapTexture
 	num_pixels := len(img.pixels.buf) / 3
 	assert(num_pixels == img.width * img.height)
 
+	// Copy image by flipping it vertically, because that's what OpenGL expects
 	for i in 0..<img.height {
 		dest := mem.ptr_offset(raw_data(texture.data), img.width * 3 * (img.height - i))
 		src := mem.ptr_offset(raw_data(img.pixels.buf), img.width * 3 * i)
@@ -88,11 +107,11 @@ parse_bmp_texture :: proc(texture_path: string) -> (texture: BitmapTexture, ok: 
 		return
 	}
 	file_contents, map_err := virtual.map_file_from_path(texture_path, {.Read})
+	// If file is not found, print a warning and load the default texture
 	if map_err != nil {
-		file_contents, map_err = virtual.map_file_from_path("resources/pbremond.bmp", {.Read})
-	}
-	if map_err != nil {
-		fmt.printfln("Failed to open `%v`: %v", texture_path, map_err);
+		fmt.printfln(WARNING_YELLOW_TEXT + " Failed to open `%v`: %v", texture_path, map_err);
+		texture = get_missing_texture()
+		ok = true
 		return
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))
@@ -121,9 +140,10 @@ parse_bmp_texture :: proc(texture_path: string) -> (texture: BitmapTexture, ok: 
 	// Alternative (stupider) way of doing this:
 	// bmp_data_size := (cast(^u32)mem.ptr_offset(file_data, 0x22))^
 	bmp_data_size := get_u32le(file_contents[0x22:])
-	// Ensure that BMP raw data size == width * height * (bpp/8)
+	// Ensure that BMP raw data size == width * height * (bpp/8), take some lazy margin
+	// (>= instead of ==) for alignment
 	(bmp_data_size == 0 \
-		|| i32(bmp_data_size) == texture.width * texture.height * i32(texture.bpp / 8)) or_return
+		|| i32(bmp_data_size) >= texture.width * texture.height * i32(texture.bpp / 8)) or_return
 
 	// Allocate and copy to our buffer
 	bmp_data := mem.ptr_offset(raw_data(file_contents), data_offset)
@@ -244,7 +264,7 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 		// Transfer texture to GPU
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, bitmap.bmp.width, bitmap.bmp.height, 0, gl.RGB,
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, bitmap.bmp.width, bitmap.bmp.height, 0, gl.BGR,
 			gl.UNSIGNED_BYTE, raw_data(bitmap.bmp.data))
 		gl.GenerateMipmap(gl.TEXTURE_2D)
 		gl.BindTexture(gl.TEXTURE_2D, 0)
