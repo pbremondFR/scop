@@ -87,6 +87,8 @@ parse_any_texture_bonus :: proc(texture_path: string) -> (texture: BitmapTexture
 	num_pixels := len(img.pixels.buf) / 3
 	assert(num_pixels == img.width * img.height)
 
+	// FIXME: broken or something I don't remember
+
 	// Copy image by flipping it vertically, because that's what OpenGL expects
 	for i in 0..<img.height {
 		dest := mem.ptr_offset(raw_data(texture.data), img.width * 3 * (img.height - i))
@@ -243,8 +245,8 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 			full_file_path := filepath.join({root_dir, mtl.texture_paths[texture_unit]}, context.temp_allocator)
 			bitmaps[mtl.texture_paths[texture_unit]] = {
 				// TODO: ONLY FOR BONUSES!!!!!
-				// parse_bmp_texture(full_file_path) or_return,
-				parse_any_texture_bonus(full_file_path) or_return,
+				parse_bmp_texture(full_file_path) or_return,
+				// parse_any_texture_bonus(full_file_path) or_return,
 				0
 			}
 		}

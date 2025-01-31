@@ -298,8 +298,8 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 			active_material.texture_paths[.Map_Kd] = strings.clone(split_line[1])
 		case "map_Ks":
 			active_material.texture_paths[.Map_Ks] = strings.clone(split_line[1])
-		// case "map_Ns":
-		// 	active_material.map_Ns = strings.clone(split_line[1])
+		case "map_Ns":
+			active_material.texture_paths[.Map_Ns] = strings.clone(split_line[1])
 		// case "map_d":
 		// 	active_material.map_d = strings.clone(split_line[1])
 		// case "map_bump", "bump":

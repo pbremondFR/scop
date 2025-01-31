@@ -79,6 +79,8 @@ void main()
 	if (texture_enabled(MAP_KS))
 		spec_color *= texture(texture_Ks, Uv).xyz;
 	float spec_exponent = materials[MtlID].Ns;
+	if (texture_enabled(MAP_NS))
+		spec_exponent *= length(texture(texture_Ns, Uv).xyz);
 	vec3 viewDir = normalize(view_pos - FragPos);
 	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
