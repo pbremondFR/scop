@@ -221,13 +221,15 @@ GlMaterial :: struct {
  * Take as input list of wavefront materials, load all of the required textures in the GPU VRAM,
  * and return a new map of materials, which describe a material in OpenGL instead of Wavefront format.
  */
-load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMaterial, root_dir: string) -> (gl_textures: []GlTextureID, gl_materials: map[string]GlMaterial, ok: bool) {
-	BitmapTextureAndMaterialName :: struct {
+load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMaterial, root_dir: string) \
+	-> (gl_textures: []GlTextureID, gl_materials: map[string]GlMaterial, ok: bool)
+{
+	BitmapTextureAndMaterialID :: struct {
 		bmp: BitmapTexture,
 		gl_texture: GlTextureID,
 	}
 	// Associate a certain texture file name with a bitmap texture
-	bitmaps: map[string]BitmapTextureAndMaterialName
+	bitmaps: map[string]BitmapTextureAndMaterialID
 	defer {
 		for _, &bitmap in bitmaps do delete_BitmapTexture(bitmap.bmp)
 		delete(bitmaps)
@@ -243,7 +245,7 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 				continue
 			}
 			full_file_path := filepath.join({root_dir, mtl.texture_paths[texture_unit]}, context.temp_allocator)
-			bitmaps[mtl.texture_paths[texture_unit]] = {
+			bitmaps[mtl.texture_paths[texture_unit]] = BitmapTextureAndMaterialID{
 				// TODO: ONLY FOR BONUSES!!!!!
 				parse_bmp_texture(full_file_path) or_return,
 				// parse_any_texture_bonus(full_file_path) or_return,

@@ -252,6 +252,11 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 	materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	active_material_name := DEFAULT_MATERIAL_NAME
 
+	defer if !ok {
+		for _, &mtl in materials do delete_WavefrontMaterial(mtl);
+		delete(materials)
+	}
+
 	// Iterate over every line of the .mtl file
 	line_number := 0
 	it := string(file_contents)
@@ -274,6 +279,7 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 		}
 		active_material : ^WavefrontMaterial = &materials[active_material_name]
 		assert(active_material_name in materials)
+		// fmt.println("Hello", line_number)
 
 		switch split_line[0] {
 		case "newmtl":
@@ -351,6 +357,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 			fmt.printfln(WARNING_YELLOW_TEXT + " %v:%v: incorrect .obj statement has less than 2 tokens: `%v'", obj_file_path, line_number, line)
 			continue
 		}
+		// fmt.println("Hi", line_number)
 		switch split_line[0] {
 		case "v":
 			parse_vertex(&obj_data, split_line[1:]) or_return
