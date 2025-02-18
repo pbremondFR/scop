@@ -239,9 +239,11 @@ ParseResult :: enum {
  * Trim Wavefront Obj statement/directive of whitespaces and comments. Split this statement into individual tokens.
  */
 @(private="file")
-trim_and_split_line :: proc(line: string, allmaterial_name
-	material_name
-	material_name
+trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trimmed: string, split: []string)
+{
+	hash_index := strings.index_byte(line, '#')
+	trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
+	trimmed = strings.trim_space(trimmed)
 	// Split current line into tokens with temp_allocator to parse easily
 	split = strings.fields(trimmed, allocator)
 	return
