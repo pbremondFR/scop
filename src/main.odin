@@ -87,6 +87,40 @@ state := State{
 	normals_view_length = 1.0,
 }
 
+/*
+            ╔══════════════╗
+            ║parse_obj_file║
+            ╚══════════════╝
+               │          │
+               │          │
+               │          │
+   ┌───────────▼────┐  ┌──▼─────────────────────────┐
+   │WavefrontObjData│  │map[string]WavefrontMaterial│
+   └───────────────┬┘  └───────────────┬────────────┘
+                   │                   │
+model_offset◄──────┼                   │
+camera_pos         │                   │
+            ╔══════▼══════════════╗    │
+            ║obj_data_to_gl_models║◄───┼
+            ╚═════════════════════╝    │
+                     │                 │
+                 ┌───▼───┐             │
+        To GPU◄──┤GlModel│             │
+                 └───┬───┘             │
+                     │      ╔══════════▼═══════════════════════════╗
+                     │      ║load_textures_from_wavefront_materials║
+                     │      ╚════┬════════════════════════┬════════╝
+                     │           │                        │
+                     │  ┌────────▼────────────┐     ┌─────▼───────┐
+                     │  │map[string]GlMaterial│     │[]GlTextureID│
+                     │  └─┬──────┬────────────┘     └┬────────────┘
+                     │    │      │                   └►Textures
+                     │    │      └►To GPU uniform      to GPU
+             ╔═══════▼════▼═╗      buffer
+             ║RENDERING LOOP║
+             ╚══════════════╝
+ */
+
 // For tracking allocator below (leaks/double free debugging)
 import "core:mem"
 
@@ -119,10 +153,7 @@ main :: proc() {
 		return
 	}
 
-	// Get desired .obj file from program arguments. main() doesn't take args,
-	// it's more like in Python with os.args
-	file_path := os.args[1]
-	obj_data, mtl_materials, obj_ok := parse_obj_file(file_path)
+	obj_data, mtl_materials, obj_ok := parse_obj_file(os.args[1])
 	// XXX: These defer calls are fine even in case of error
 	defer {
 		delete_WavefrontObjFile(obj_data)
@@ -130,7 +161,7 @@ main :: proc() {
 		delete(mtl_materials)
 	}
 	if !obj_ok {
-		fmt.printfln("Failed to load `%v`", file_path)
+		fmt.printfln("Failed to load `%v`", os.args[1])
 		return
 	}
 
@@ -145,9 +176,7 @@ main :: proc() {
 
 	// === INIT OPENGL ===
 	window, opengl_ok := init_OpenGL()
-	if !opengl_ok {
-		return
-	}
+	if !opengl_ok do return
 	defer {
 		glfw.Terminate()
 		glfw.DestroyWindow(window)
@@ -177,12 +206,7 @@ main :: proc() {
 	// === LOAD MAIN MODEL ===
 	main_model: GlModel = obj_data_to_gl_objects(&obj_data, mtl_materials)
 	assert(main_model.vao != 0 && main_model.vbo != 0 && main_model.ebo != 0)
-	defer {
-		gl.DeleteVertexArrays(1, &main_model.vao)
-		gl.DeleteBuffers(1, &main_model.vbo)
-		gl.DeleteBuffers(1, &main_model.ebo)
-		delete(main_model.index_ranges)
-	}
+	defer delete_GlModel(&main_model)
 
 	// === LOAD LIGHT CUBE ===
 	light_vao, light_vbo := create_light_source()
@@ -192,7 +216,7 @@ main :: proc() {
 		gl.DeleteBuffers(1, &light_vbo)
 	}
 
-	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL
+	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL ===
 	wavefront_root_dir := filepath.dir(os.args[1])
 	defer delete(wavefront_root_dir)
 	gl_textures, gl_materials, textures_ok := load_textures_from_wavefront_materials(mtl_materials, wavefront_root_dir)
@@ -218,15 +242,9 @@ main :: proc() {
 	gl.UseProgram(shader_programs[state.shader_program])
 
 	// === MATERIALS UNIFORM BUFFER ===
-	ubo: u32
-	gl.GenBuffers(1, &ubo)
-	gl.BindBuffer(gl.UNIFORM_BUFFER, ubo)
-	uniform_buffer_data := gl_materials_to_uniform_buffer(gl_materials)
-	gl.BufferData(gl.UNIFORM_BUFFER, len(uniform_buffer_data) * size_of(uniform_buffer_data[0]),
-		raw_data(uniform_buffer_data), gl.STATIC_DRAW)
-	gl.BindBuffer(gl.UNIFORM_BUFFER, 0)
-	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
-	delete(uniform_buffer_data)
+	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
+	defer gl.DeleteBuffers(1, &ubo)
+	assert(ubo != 0)
 
 	// Enable backface culling
 	// gl.Enable(gl.CULL_FACE)
@@ -236,7 +254,6 @@ main :: proc() {
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 	gl.Enable(gl.DEPTH_TEST)
-	gl.ClearColor(0.2, 0.3, 0.3, 1.0)
 	gl.ClearColor(0.0, 0.0, 0.0, 1.0)
 
 	old_time, time: f64 = glfw.GetTime(), glfw.GetTime()
@@ -328,7 +345,7 @@ main :: proc() {
 
 }
 
-get_initial_camera_pos :: proc(model: WavefrontObjFile) -> Vec3f {
+get_initial_camera_pos :: proc(model: WavefrontObjData) -> Vec3f {
 	// Get bounding box around model
 	min, max: Vec3f
 	for v in model.vert_positions {
@@ -343,7 +360,7 @@ get_initial_camera_pos :: proc(model: WavefrontObjFile) -> Vec3f {
 	return {0.0, 0.0, -offset}
 }
 
-get_model_offset_matrix :: proc(model: WavefrontObjFile) -> Mat4f {
+get_model_offset_matrix :: proc(model: WavefrontObjData) -> Mat4f {
 	// Get min and max points of bounding box around model
 	min, max: Vec3f
 	for v in model.vert_positions {

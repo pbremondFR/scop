@@ -120,7 +120,7 @@ VertexData :: struct #packed {
 
 @(private="file")
 append_vertex_in_vertex_buffer :: proc(
-	obj_data: ^WavefrontObjFile,
+	obj_data: ^WavefrontObjData,
 	material_index: u32,
 	vertex_buffer: ^[dynamic]VertexData,
 	vertex_id: WavefrontVertexID)
@@ -161,6 +161,7 @@ GlIndexBufferRange :: struct {
 	material_index: u32,
 }
 
+@(private="file")
 ModelVerticesAndIndexes :: struct {
 	vertex_buffer: []VertexData,
 	index_buffer: []u32,
@@ -172,7 +173,8 @@ ModelVerticesAndIndexes :: struct {
  * used by OpenGL to draw them.
  * This function may add data to some members of obj_data, which is why it is given as a pointer.
  */
-obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> ModelVerticesAndIndexes {
+@(private="file")
+obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> ModelVerticesAndIndexes {
 	// Pre-allocate enough memory for the maximum amount of vertices
 	vertex_buffer := make([dynamic]VertexData, 0, len(obj_data.vertex_indices))
 	// I'm sorting the index buffer by the material ID, which allows me to render each material with
@@ -253,9 +255,22 @@ GlModel :: struct {
 	index_ranges: []GlIndexBufferRange,
 }
 
-obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjFile, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel) {
+delete_GlModel :: proc(model: ^GlModel)
+{
+	gl.DeleteVertexArrays(1, &model.vao)
+	gl.DeleteBuffers(1, &model.vbo)
+	gl.DeleteBuffers(1, &model.ebo)
+	delete(model.index_ranges)
+}
+
+/*
+ * Converts Wavefront .obj data into OpenGL buffers.
+ * This function creates a VAO, VBO, and EBO. It also gives an array of index ranges.
+ * Each index range corresponds to a group of vertices belonging to the same material.
+ * Segregating by material opens the door for rendering techniques like order-independant dissolve.
+ */
+obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel) {
 	buffers := obj_data_to_vertex_buffer(obj_data, materials)
-	// vertex_buffer, index_buffer, foo := obj_data_to_vertex_buffer(obj_data, materials)
 	defer {
 		// Once those are sent to the GPU memory, we can release them from CPU RAM
 		delete(buffers.vertex_buffer)
@@ -311,16 +326,24 @@ GlUniformMaterialData :: struct #packed {
 	Ka: Vec3f "Ambient color",
 	Ns: f32 "Specular exponent",
 	Kd: Vec3f "Diffuse color",
-	d: f32 "Dissolve", // Also known as "Tr" (1 - dossolve)
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dissolve)
 	Ks: Vec3f "Specular color",
 	Ni: f32 "Index of refraction",
 	Tf: Vec3f "Transmission filter color",
 	// Disable illumination model for now (not used anyway)
 	// illum: IlluminationModel "Illumination model",
+
+	// Bitfield indicating which textures are enabled. The Nth LSB bit enabled means the
+	// Nth member of the TextureUnit enum is enabled for this material.
 	enabled_textures_flags: u32,
 }
 
-gl_materials_to_uniform_buffer :: proc(gl_materials: map[string]GlMaterial) -> []GlUniformMaterialData {
+/*
+ * Converts the list of OpenGL materials to a plain buffer containing all relevant material info for OpenGL.
+ * This buffer can then be copied into a uniform buffer and passed to shaders.
+ */
+@(private="file")
+gl_materials_to_raw_uniform_data :: proc(gl_materials: map[string]GlMaterial) -> []GlUniformMaterialData {
 	gl_buffer := make([]GlUniformMaterialData, len(gl_materials))
 	for _, material in gl_materials {
 		// Set corresponding bit to 1 if texture should be enabled
@@ -343,6 +366,23 @@ gl_materials_to_uniform_buffer :: proc(gl_materials: map[string]GlMaterial) -> [
 	}
 
 	return gl_buffer
+}
+
+/*
+ * Tranfer all of GlMaterials into a uniform buffer object that can be used by shaders.
+ */
+gl_materials_to_uniform_buffer_object :: proc(gl_materials: map[string]GlMaterial) -> (ubo: u32)
+{
+	uniform_buffer_data := gl_materials_to_raw_uniform_data(gl_materials)
+	defer delete(uniform_buffer_data)
+
+	gl.GenBuffers(1, &ubo)
+	gl.BindBuffer(gl.UNIFORM_BUFFER, ubo)
+	gl.BufferData(gl.UNIFORM_BUFFER, len(uniform_buffer_data) * size_of(uniform_buffer_data[0]),
+		raw_data(uniform_buffer_data), gl.STATIC_DRAW)
+	gl.BindBuffer(gl.UNIFORM_BUFFER, 0)
+	gl.BindBufferBase(gl.UNIFORM_BUFFER, 0, ubo)
+	return
 }
 
 set_shader_uniform :: proc{

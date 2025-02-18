@@ -74,7 +74,7 @@ WavefrontMaterial :: struct {
 	Kd: Vec3f "Diffuse color",
 	Ks: Vec3f "Specular color",
 	Ns: f32 "Specular exponent",
-	d: f32 "Dissolve", // Also known as "Tr" (1 - dossolve)
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dissolve)
 	Tf: Vec3f "Transmission filter color",
 	Ni: f32 "Index of refraction",
 	illum: IlluminationModel "Illumination model",
@@ -103,7 +103,7 @@ get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME) -> WavefrontM
 	}
 }
 
-WavefrontObjFile :: struct {
+WavefrontObjData :: struct {
 	vert_positions:	[dynamic]Vec3f,
 	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
 	normals:	[dynamic]Vec3f,
@@ -111,14 +111,14 @@ WavefrontObjFile :: struct {
 	vertex_indices:	[dynamic]WavefrontVertexID,
 }
 
-delete_WavefrontObjFile :: proc(data: WavefrontObjFile) {
+delete_WavefrontObjFile :: proc(data: WavefrontObjData) {
 	delete(data.vert_positions)
 	delete(data.tex_coords)
 	delete(data.normals)
 	delete(data.vertex_indices)
 }
 @(private="file")
-parse_vertex :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
+parse_vertex :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -129,7 +129,7 @@ parse_vertex :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
 	return true
 }
 @(private="file")
-parse_vertex_texture :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
+parse_vertex_texture :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) >= 1)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -140,7 +140,7 @@ parse_vertex_texture :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -
 	return true
 }
 @(private="file")
-parse_vertex_normal :: proc(obj_data: ^WavefrontObjFile, split_str: []string) -> bool {
+parse_vertex_normal :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
 	vertex := Vec3f{
 		strconv.parse_f32(split_str[0]) or_return,
@@ -155,7 +155,7 @@ parse_vertex_normal :: proc(obj_data: ^WavefrontObjFile, split_str: []string) ->
 // https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
 // https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
 @(private="file")
-parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: ^string) -> bool {
+parse_easy_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: ^string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -177,7 +177,7 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, materi
 }
 
 @(private="file")
-parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: ^string) -> bool {
+parse_hard_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: ^string) -> bool {
 	assert(len(split_str) >= 3)
 	// For each vertex, parse index data (v/vt/vn). UVs and normals are optional
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -246,7 +246,7 @@ trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trim
 }
 
 @(private="file")
-parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjFile, active_material: ^string) -> ParseResult
+parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjData, active_material: ^string) -> ParseResult
 {
 	switch split_statement[0] {
 		case "v":
@@ -267,7 +267,7 @@ parse_obj_vertex_statement :: proc(statement: string, split_statement: []string,
 	return .Ok
 }
 
-parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
+parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjData, materials: map[string]WavefrontMaterial, ok: bool) {
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
 		fmt.printfln("Error mapping `%v`: %v", obj_file_path, err)
@@ -280,6 +280,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	defer delete(working_dir)
 
 	active_material_name := DEFAULT_MATERIAL_NAME
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
 	it := string(file_contents)
 	line_number := 0
