@@ -72,6 +72,7 @@ State :: struct {
 	dt: f64,
 	glfw_inputs: map[i32]bool,
 
+	model_offset: Mat4f,
 	camera: PlayerCamera,
 	light_source_pos: Vec3f,
 	enable_model_spin: bool,
@@ -86,40 +87,6 @@ state := State{
 	shader_program = .DefaultShader,
 	normals_view_length = 1.0,
 }
-
-/*
-            ╔══════════════╗
-            ║parse_obj_file║
-            ╚══════════════╝
-               │          │
-               │          │
-               │          │
-   ┌───────────▼────┐  ┌──▼─────────────────────────┐
-   │WavefrontObjData│  │map[string]WavefrontMaterial│
-   └───────────────┬┘  └───────────────┬────────────┘
-                   │                   │
-model_offset◄──────┼                   │
-camera_pos         │                   │
-            ╔══════▼══════════════╗    │
-            ║obj_data_to_gl_models║◄───┼
-            ╚═════════════════════╝    │
-                     │                 │
-                 ┌───▼───┐             │
-        To GPU◄──┤GlModel│             │
-                 └───┬───┘             │
-                     │      ╔══════════▼═══════════════════════════╗
-                     │      ║load_textures_from_wavefront_materials║
-                     │      ╚════┬════════════════════════┬════════╝
-                     │           │                        │
-                     │  ┌────────▼────────────┐     ┌─────▼───────┐
-                     │  │map[string]GlMaterial│     │[]GlTextureID│
-                     │  └─┬──────┬────────────┘     └┬────────────┘
-                     │    │      │                   └►Textures
-                     │    │      └►To GPU uniform      to GPU
-             ╔═══════▼════▼═╗      buffer
-             ║RENDERING LOOP║
-             ╚══════════════╝
- */
 
 // For tracking allocator below (leaks/double free debugging)
 import "core:mem"
@@ -153,27 +120,6 @@ main :: proc() {
 		return
 	}
 
-	obj_data, mtl_materials, obj_ok := parse_obj_file(os.args[1])
-	// XXX: These defer calls are fine even in case of error
-	defer {
-		delete_WavefrontObjFile(obj_data)
-		for _, &mtl in mtl_materials do delete_WavefrontMaterial(mtl)
-		delete(mtl_materials)
-	}
-	if !obj_ok {
-		fmt.printfln("Failed to load `%v`", os.args[1])
-		return
-	}
-
-	model_offset := get_model_offset_matrix(obj_data)
-	state.camera.pos = get_initial_camera_pos(obj_data)
-	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
-	state.light_source_pos = Vec3f{
-		-state.camera.pos.z * 2,
-		-state.camera.pos.z * 2,
-		0,
-	}
-
 	// === INIT OPENGL ===
 	window, opengl_ok := init_OpenGL()
 	if !opengl_ok do return
@@ -203,11 +149,6 @@ main :: proc() {
 		for id in shader_programs do gl.DeleteProgram(id)
 	}
 
-	// === LOAD MAIN MODEL ===
-	main_model: GlModel = obj_data_to_gl_objects(&obj_data, mtl_materials)
-	assert(main_model.vao != 0 && main_model.vbo != 0 && main_model.ebo != 0)
-	defer delete_GlModel(&main_model)
-
 	// === LOAD LIGHT CUBE ===
 	light_vao, light_vbo := create_light_source()
 	assert(light_vao != 0 && light_vbo != 0)
@@ -216,20 +157,6 @@ main :: proc() {
 		gl.DeleteBuffers(1, &light_vbo)
 	}
 
-	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL ===
-	wavefront_root_dir := filepath.dir(os.args[1])
-	defer delete(wavefront_root_dir)
-	gl_textures, gl_materials, textures_ok := load_textures_from_wavefront_materials(mtl_materials, wavefront_root_dir)
-	if !textures_ok {
-		fmt.println("Error loading textures")
-		return
-	}
-	defer {
-		gl.DeleteTextures(i32(len(gl_textures)), cast([^]u32)&gl_textures)
-		delete(gl_textures)
-		for _, &material in gl_materials do delete(material.name)
-		delete(gl_materials)
-	}
 	gl.UseProgram(shader_programs[.DefaultShader])
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_Ka", i32(TextureUnit.Map_Ka))
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_Kd", i32(TextureUnit.Map_Kd))
@@ -241,10 +168,10 @@ main :: proc() {
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_decal", i32(TextureUnit.Decal))
 	gl.UseProgram(shader_programs[state.shader_program])
 
-	// === MATERIALS UNIFORM BUFFER ===
-	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
-	defer gl.DeleteBuffers(1, &ubo)
-	assert(ubo != 0)
+	main_model, gl_materials, gl_textures, model_ok := load_model(os.args[1])
+	if !model_ok {
+		fmt.println("fuck")
+	}
 
 	// Enable backface culling
 	// gl.Enable(gl.CULL_FACE)
@@ -283,7 +210,7 @@ main :: proc() {
 		if state.enable_model_spin {
 			time_accum += state.dt
 		}
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * model_offset
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * state.model_offset
 		// TODO: Determine far plane distance based on object size?
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 1500)
 
