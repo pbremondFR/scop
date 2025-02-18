@@ -21,6 +21,10 @@ Vec2d :: [2]f64
 Vec3d :: [3]f64
 Vec4d :: [4]f64
 
+// I'm making this type to have a semantic difference between a string that
+// must be freed and a string that's just a shallow copy/slice of another string
+StringSlice :: distinct string
+
 /*
  * Represents a single vertex in the Wavefront data format. It contains the indices of the vertex's
  * position, uv coordinates, and normals. It also contains the material's name.
@@ -31,7 +35,7 @@ WavefrontVertexID :: struct {
 	pos_idx: u32,
 	uv_idx: u32,
 	norm_idx: u32,
-	material: ^string,
+	material: StringSlice,
 }
 
 /*
@@ -155,7 +159,7 @@ parse_vertex_normal :: proc(obj_data: ^WavefrontObjData, split_str: []string) ->
 // https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
 // https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
 @(private="file")
-parse_easy_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: ^string) -> bool {
+parse_easy_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -166,9 +170,9 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, materi
 			cast(u32)strconv.parse_u64(split_str[i + 1]) or_return - 1,
 		}
 		to_append := [3]WavefrontVertexID{
-			{pos_idx = pos_indices[0], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name},
-			{pos_idx = pos_indices[1], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name},
-			{pos_idx = pos_indices[2], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = material_name}
+			{pos_idx = pos_indices[0], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = StringSlice(material_name)},
+			{pos_idx = pos_indices[1], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = StringSlice(material_name)},
+			{pos_idx = pos_indices[2], uv_idx = clang.UINT32_MAX, norm_idx = clang.UINT32_MAX, material = StringSlice(material_name)}
 		}
 		append(&obj_data.vertex_indices, ..to_append[:])
 
@@ -177,7 +181,7 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, materi
 }
 
 @(private="file")
-parse_hard_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: ^string) -> bool {
+parse_hard_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, material_name: string) -> bool {
 	assert(len(split_str) >= 3)
 	// For each vertex, parse index data (v/vt/vn). UVs and normals are optional
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -214,9 +218,9 @@ parse_hard_face :: proc(obj_data: ^WavefrontObjData, split_str: []string, materi
 			normals_indices = [3]u32{clang.UINT32_MAX, clang.UINT32_MAX, clang.UINT32_MAX}
 		}
 		to_append := [3]WavefrontVertexID{
-			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0], material = material_name},
-			{pos_idx = pos_indices[1], uv_idx = uv_indices[1], norm_idx = normals_indices[1], material = material_name},
-			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2], material = material_name}
+			{pos_idx = pos_indices[0], uv_idx = uv_indices[0], norm_idx = normals_indices[0], material = StringSlice(material_name)},
+			{pos_idx = pos_indices[1], uv_idx = uv_indices[1], norm_idx = normals_indices[1], material = StringSlice(material_name)},
+			{pos_idx = pos_indices[2], uv_idx = uv_indices[2], norm_idx = normals_indices[2], material = StringSlice(material_name)}
 		}
 		append(&obj_data.vertex_indices, ..to_append[:])
 	}
@@ -235,18 +239,16 @@ ParseResult :: enum {
  * Trim Wavefront Obj statement/directive of whitespaces and comments. Split this statement into individual tokens.
  */
 @(private="file")
-trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trimmed: string, split: []string)
-{
-	hash_index := strings.index_byte(line, '#')
-	trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
-	trimmed = strings.trim_space(trimmed)
+trim_and_split_line :: proc(line: string, allmaterial_name
+	material_name
+	material_name
 	// Split current line into tokens with temp_allocator to parse easily
 	split = strings.fields(trimmed, allocator)
 	return
 }
 
 @(private="file")
-parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjData, active_material: ^string) -> ParseResult
+parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjData, active_material: string) -> ParseResult
 {
 	switch split_statement[0] {
 		case "v":
@@ -308,7 +310,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjData, ma
 					active_material_name = materials[split_line[1]].name
 				}
 			case:	// Handle vertex directives in their own functions
-				#partial switch parse_obj_vertex_statement(trimmed, split_line, &obj_data, &active_material_name) {
+				#partial switch parse_obj_vertex_statement(trimmed, split_line, &obj_data, active_material_name) {
 					case .Unsupported:
 						log_warning("%v:%v: unsupported %v directive", file_name, line_number, split_line[0])
 					case .Failure:

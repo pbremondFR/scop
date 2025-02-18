@@ -204,7 +204,7 @@ obj_data_to_vertex_buffer :: proc(obj_data: ^WavefrontObjData, materials: map[st
 
 	for i in 0..<len(obj_data.vertex_indices) {
 		vertex_identity := obj_data.vertex_indices[i]
-		material_index := materials[vertex_identity.material^].index
+		material_index := materials[string(vertex_identity.material)].index
 
 		if vertex_identity not_in vertex_ebo_locations {
 			// This vertex is still unique, insert it
