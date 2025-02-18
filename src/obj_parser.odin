@@ -10,6 +10,7 @@ import "core:strconv"
 import "core:path/filepath"
 import "core:encoding/ansi"
 import "core:slice"
+import "base:runtime"
 import clang "core:c"
 
 Vec2f :: [2]f32
@@ -20,13 +21,22 @@ Vec2d :: [2]f64
 Vec3d :: [3]f64
 Vec4d :: [4]f64
 
+/*
+ * Represents a single vertex in the Wavefront data format. It contains the indices of the vertex's
+ * position, uv coordinates, and normals. It also contains the material's name.
+ * This structure is used as an intermediate representation and will be converted to an OpenGL vertex
+ * later down the pipeline.
+ */
 WavefrontVertexID :: struct {
 	pos_idx: u32,
 	uv_idx: u32,
 	norm_idx: u32,
-	material: string,
+	material: ^string,
 }
 
+/*
+ * Lists all of the possible illumination models in the Wavefront Object format.
+ */
 IlluminationModel :: enum u32 {
 	ColorOnAmbientOff,
 	ColorOnAmbientOn,
@@ -41,6 +51,10 @@ IlluminationModel :: enum u32 {
 	CastsShadowOntoInvisibleSurfaces,
 }
 
+/*
+ * Lists all of the supported texture types that can be found in the Wavefront Material file.
+ * These can then be used in different OpenGL texture units.
+ */
 TextureUnit :: enum u32 {
 	Map_Ka,
 	Map_Kd,
@@ -97,7 +111,7 @@ WavefrontObjFile :: struct {
 	vertex_indices:	[dynamic]WavefrontVertexID,
 }
 
-delete_ObjFileData :: proc(data: WavefrontObjFile) {
+delete_WavefrontObjFile :: proc(data: WavefrontObjFile) {
 	delete(data.vert_positions)
 	delete(data.tex_coords)
 	delete(data.normals)
@@ -141,7 +155,7 @@ parse_vertex_normal :: proc(obj_data: ^WavefrontObjFile, split_str: []string) ->
 // https://stackoverflow.com/questions/38279156/why-there-are-still-many-wavefront-obj-files-containing-4-vertices-in-one-face
 // https://stackoverflow.com/questions/23723993/converting-quadriladerals-in-an-obj-file-into-triangles
 @(private="file")
-parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: string) -> bool {
+parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: ^string) -> bool {
 	assert(len(split_str) >= 3)
 	for i in 1..=len(split_str) - 2 {
 		// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -163,7 +177,7 @@ parse_easy_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, materi
 }
 
 @(private="file")
-parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: string) -> bool {
+parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, material_name: ^string) -> bool {
 	assert(len(split_str) >= 3)
 	// For each vertex, parse index data (v/vt/vn). UVs and normals are optional
 	// .obj uses 1-based indexing, OpenGL uses 0-based. Careful!
@@ -211,120 +225,49 @@ parse_hard_face :: proc(obj_data: ^WavefrontObjFile, split_str: []string, materi
 }
 
 @(private="file")
-parse_vec3 :: proc(split_str: []string, output: ^Vec3f) -> (ok: bool) {
-	if len(split_str) < 3 {
-		return
-	}
-	output.x = strconv.parse_f32(split_str[0]) or_return
-	output.y = strconv.parse_f32(split_str[1]) or_return
-	output.z = strconv.parse_f32(split_str[2]) or_return
-	ok = true
+ParseResult :: enum {
+	Ok,
+	Unsupported,
+	Failure,
+}
+
+/*
+ * Trim Wavefront Obj statement/directive of whitespaces and comments. Split this statement into individual tokens.
+ */
+@(private="file")
+trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trimmed: string, split: []string)
+{
+	hash_index := strings.index_byte(line, '#')
+	trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
+	trimmed = strings.trim_space(trimmed)
+	// Split current line into tokens with temp_allocator to parse easily
+	split = strings.fields(trimmed, allocator)
 	return
 }
 
 @(private="file")
-parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
-	if len(split_str) < 2 {
-		return
-	}
-	output.x = strconv.parse_f32(split_str[0]) or_return
-	output.y = strconv.parse_f32(split_str[1]) or_return
-	ok = true
-	return
-}
-
-MAX_MATERIALS :: 128
-WARNING_YELLOW_TEXT :: ansi.CSI + ansi.FG_YELLOW + ansi.SGR + "WARNING:" + ansi.CSI + ansi.RESET + ansi.SGR
-ERROR_RED_TEXT :: ansi.CSI + ansi.FG_RED + ansi.SGR + "ERROR:" + ansi.CSI + ansi.RESET + ansi.SGR
-NOTE_BLUE_TEXT ::ansi.CSI + ansi.FG_BLUE + ansi.SGR + "NOTE:" + ansi.CSI + ansi.RESET + ansi.SGR
-
-parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
-	mtl_file_path := filepath.join({working_dir, mtl_file_name})
-	defer delete(mtl_file_path)
-
-	file_contents, err := virtual.map_file_from_path(mtl_file_path, {.Read})
-	if err != nil {
-		fmt.printfln("Error mapping `%v`: %v", mtl_file_path, err)
-		return
-	}
-	defer virtual.release(raw_data(file_contents), len(file_contents))
-
-	materials[DEFAULT_MATERIAL_NAME] = get_default_material()
-	active_material_name := DEFAULT_MATERIAL_NAME
-
-	defer if !ok {
-		for _, &mtl in materials do delete_WavefrontMaterial(mtl);
-		delete(materials)
-	}
-
-	// Iterate over every line of the .mtl file
-	line_number := 0
-	it := string(file_contents)
-	for line in strings.split_lines_iterator(&it) {
-		line_number += 1
-		// Slice away everything after the #
-		hash_index := strings.index_byte(line, '#')
-		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
-		to_parse = strings.trim_space(to_parse)
-		// Skip rest of work if line is empty
-		if (len(to_parse) == 0) {
-			continue
-		}
-
-		split_line := strings.fields(to_parse, context.temp_allocator)
-		// Don't free memory from temp_allocator here, it will be done by calling function!
-		if len(split_line) < 2 {
-			fmt.printfln(WARNING_YELLOW_TEXT + "%v:%v: incorrect .mtl statement has less than 2 tokens: `%v'", mtl_file_name, line_number, line)
-			continue
-		}
-		active_material : ^WavefrontMaterial = &materials[active_material_name]
-		assert(active_material_name in materials)
-		// fmt.println("Hello", line_number)
-
-		switch split_line[0] {
-		case "newmtl":
-			active_material_name = split_line[1]
-			new_material := get_default_material(active_material_name)
-			materials[new_material.name] = new_material
-		case "Ka":
-			parse_vec3(split_line[1:], &active_material.Ka) or_return
-		case "Kd":
-			parse_vec3(split_line[1:], &active_material.Kd) or_return
-		case "Ks":
-			parse_vec3(split_line[1:], &active_material.Ks) or_return
-		case "Ns":
-			active_material.Ns = strconv.parse_f32(split_line[1]) or_else 32
-		case "Tr":
-			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else 0.0)
-		case "d":
-			active_material.d = strconv.parse_f32(split_line[1]) or_else 0.0
-		case "map_Ka":
-			active_material.texture_paths[.Map_Ka] = strings.clone(split_line[1])
-		case "map_Kd":
-			active_material.texture_paths[.Map_Kd] = strings.clone(split_line[1])
-		case "map_Ks":
-			active_material.texture_paths[.Map_Ks] = strings.clone(split_line[1])
-		case "map_Ns":
-			active_material.texture_paths[.Map_Ns] = strings.clone(split_line[1])
-		// case "map_d":
-		// 	active_material.map_d = strings.clone(split_line[1])
-		// case "map_bump", "bump":
-		// 	active_material.map_bump = strings.clone(split_line[1])
-		// case "disp":
-		// 	active_material.map_disp = strings.clone(split_line[1])
-		// case "decal":
-		// 	active_material.decal = strings.clone(split_line[1])
+parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjFile, active_material: ^string) -> ParseResult
+{
+	switch split_statement[0] {
+		case "v":
+			if !parse_vertex(obj_data, split_statement[1:]) do return .Failure
+		case "vt":
+			if !parse_vertex_texture(obj_data, split_statement[1:]) do return .Failure
+		case "vn":
+			if !parse_vertex_normal(obj_data, split_statement[1:]) do return .Failure
+		case "f":
+			if strings.contains_rune(statement, '/') {
+				if !parse_hard_face(obj_data, split_statement[1:], active_material) do return .Failure
+			} else {
+				if !parse_easy_face(obj_data, split_statement[1:], active_material) do return .Failure
+			}
 		case: // default
-				fmt.printfln(NOTE_BLUE_TEXT + " %v:%v: unsupported %v directive", mtl_file_name, line_number, split_line[0])
-		}
+			return .Unsupported
 	}
-	ok = true
-	return
+	return .Ok
 }
 
-// TODO: Handle more complex face definitions
 parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, materials: map[string]WavefrontMaterial, ok: bool) {
-	using virtual.Map_File_Flag
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
 		fmt.printfln("Error mapping `%v`: %v", obj_file_path, err)
@@ -342,48 +285,35 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 	line_number := 0
 	for line in strings.split_lines_iterator(&it) {
 		line_number += 1
-		hash_index := strings.index_byte(line, '#')
-		to_parse := line[:hash_index if hash_index >= 0 else len(line)]
-		to_parse = strings.trim_space(to_parse)
-		// Skip rest of work if length is 0
-		if len(to_parse) == 0 {
+		trimmed, split_line := trim_and_split_line(line, context.temp_allocator)
+		if (len(trimmed) == 0) {
 			continue
 		}
-		// Split current line into tokens with temp_allocator to parse easily
-		split_line := strings.fields(to_parse, context.temp_allocator)
-		defer free_all(context.temp_allocator)
-		// We should never get less than two tokens!
+
+		// We should never get less than two tokens! Ignore this line as it is invalid, but don't error out.
 		if len(split_line) < 2 {
-			fmt.printfln(WARNING_YELLOW_TEXT + " %v:%v: incorrect .obj statement has less than 2 tokens: `%v'", obj_file_path, line_number, line)
+			log_warning("%v:%v: incorrect .obj statement has less than 2 tokens: `%v'", obj_file_path, line_number, line)
 			continue
 		}
-		// fmt.println("Hi", line_number)
+
 		switch split_line[0] {
-		case "v":
-			parse_vertex(&obj_data, split_line[1:]) or_return
-		case "vt":
-			parse_vertex_texture(&obj_data, split_line[1:]) or_return
-		case "vn":
-			parse_vertex_normal(&obj_data, split_line[1:]) or_return
-		case "f":
-			if strings.contains_rune(to_parse, '/') {
-				parse_hard_face(&obj_data, split_line[1:], active_material_name) or_return
-			} else {
-				parse_easy_face(&obj_data, split_line[1:], active_material_name) or_return
-			}
-		case "mtllib":
-			materials = parse_mtl_file(split_line[1], working_dir) or_return
-		case "usemtl":
-			// XXX: I could make it so it only stored the name of the material and tries to
-			// bind to it later, so that we don't need to call "mtllib" at the top of the file,
-			// but that might be overkill/beyond the Wavefront spec
-			if split_line[1] not_in materials {
-				fmt.printfln(ERROR_RED_TEXT + " line %v: Material `%v' is not found in current materials", line_number, split_line[1])
-				return
-			}
-			active_material_name = materials[split_line[1]].name
-		case: // default
-			fmt.printfln(NOTE_BLUE_TEXT + " %v:%v: unsupported %v directive", obj_file_path, line_number, split_line[0])
+			case "mtllib":
+				materials = parse_mtl_file(split_line[1], working_dir, context.temp_allocator) or_return
+			case "usemtl":
+				if split_line[1] not_in materials {
+					log_warning("%v:%v: Material `%v' is not found in current materials", file_name, line_number, split_line[1])
+					active_material_name = DEFAULT_MATERIAL_NAME
+				} else {
+					active_material_name = materials[split_line[1]].name
+				}
+			case:	// Handle vertex directives in their own functions
+				#partial switch parse_obj_vertex_statement(trimmed, split_line, &obj_data, &active_material_name) {
+					case .Unsupported:
+						log_warning("%v:%v: unsupported %v directive", file_name, line_number, split_line[0])
+					case .Failure:
+						log_error("%v:%v: failed to parse statement", file_name, line_number)
+						return
+				}
 		}
 	}
 
@@ -394,10 +324,9 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjFile, ma
 		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	}
 
-	// Transfers ownership of materials from map to array
-	// materials_array = consume_materials_map_to_array(&materials)
+	// Assign each material a unique index
 	index: u32 = 0
-	for name, &mtl in materials {
+	for _, &mtl in materials {
 		mtl.index = index
 		index += 1
 	}

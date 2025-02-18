@@ -54,37 +54,73 @@ bool texture_enabled(uint texture_unit)
 	return (materials[MtlID].enabled_textures & (1 << texture_unit)) != 0;
 }
 
-void main()
+vec3	get_normal()
 {
-	// Ambient lighting
+	if (texture_enabled(MAP_BUMP))
+	{
+		vec3 normal = texture(texture_bump, Uv).rgb;
+		// transform normal vector to range [-1,1]
+		normal = normalize(normal * 2.0 - 1.0);
+		return normal;
+	}
+	else
+	{
+		vec3 normal = normalize(Normal);
+		if (length(normal) == 0) // No vertex normal, calc face normal
+			normal = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+		return normal;
+	}
+}
+
+vec3	calc_ambient()
+{
 	vec3 ambient_color = materials[MtlID].Ka;
 	if (texture_enabled(MAP_KA))
-		ambient_color *= texture(texture_Ka, Uv).xyz;
+		ambient_color *= texture(texture_Ka, Uv).rgb;
 	vec3 ambient_lighting = vec3(0.2, 0.2, 0.2);
 	vec3 ambient = ambient_color * ambient_lighting;
 
-	// Diffuse lighting
+	return ambient;
+}
+
+vec3	calc_diffuse(vec3 norm, vec3 lightDir)
+{
 	vec3 diffuse_color = materials[MtlID].Kd;
 	if (texture_enabled(MAP_KD))
-		diffuse_color *= texture(texture_Kd, Uv).xyz;
-	vec3 norm = normalize(Normal);
-	if (length(norm) == 0)
-		norm = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
-	vec3 lightDir = normalize(light_pos - FragPos);
+		diffuse_color *= texture(texture_Kd, Uv).rgb;
 	float diff = max(dot(norm, lightDir), 0.0);
 	vec3 diffuse = diff * diffuse_color * light_color;
 
-	// Specular lighting
+	return diffuse;
+}
+
+vec3	calc_specular(vec3 norm, vec3 lightDir)
+{
 	vec3 spec_color = materials[MtlID].Ks;
 	if (texture_enabled(MAP_KS))
-		spec_color *= texture(texture_Ks, Uv).xyz;
+		spec_color *= texture(texture_Ks, Uv).rgb;
 	float spec_exponent = materials[MtlID].Ns;
-	if (texture_enabled(MAP_NS))
-		spec_exponent *= length(texture(texture_Ns, Uv).xyz);
+	// XXX: Disable all scalar textures, can't be bothered
+	// if (texture_enabled(MAP_NS))
+	// 	spec_exponent *= length(texture(texture_Ns, Uv).xyz);
 	vec3 viewDir = normalize(view_pos - FragPos);
 	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
 	vec3 specular = spec * spec_color * light_color;
+
+	return specular;
+}
+
+void main()
+{
+	// Calculate fragment's normal
+	vec3 norm = get_normal();
+	// Calculate light source's direction
+	vec3 lightDir = normalize(light_pos - FragPos);
+
+	vec3 ambient = calc_ambient();
+	vec3 diffuse = calc_diffuse(norm, lightDir);
+	vec3 specular = calc_specular(norm, lightDir);
 
 	vec3 final_color = (ambient + diffuse + specular);
 	FragColor = vec4(final_color, 1.0);

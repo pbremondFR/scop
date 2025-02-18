@@ -114,8 +114,8 @@ main :: proc() {
 		}
 	}
 
-	if len(os.args) < 2 {
-		fmt.println("Please give the 3D model .obj as an argument")
+	if len(os.args) != 2 || !strings.ends_with(os.args[1], ".obj") {
+		fmt.printfln("usage: %v obj_file.obj", os.args[0]);
 		return
 	}
 
@@ -125,7 +125,7 @@ main :: proc() {
 	obj_data, mtl_materials, obj_ok := parse_obj_file(file_path)
 	// XXX: These defer calls are fine even in case of error
 	defer {
-		delete_ObjFileData(obj_data)
+		delete_WavefrontObjFile(obj_data)
 		for _, &mtl in mtl_materials do delete_WavefrontMaterial(mtl)
 		delete(mtl_materials)
 	}
