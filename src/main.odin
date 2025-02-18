@@ -172,6 +172,13 @@ main :: proc() {
 	if !model_ok {
 		fmt.println("fuck")
 	}
+	defer {
+		delete_GlModel(&main_model)
+		for _, &material in gl_materials do delete(material.name)
+		delete(gl_materials)
+		gl.DeleteTextures(i32(len(gl_textures)), cast([^]u32)&gl_textures)
+		delete(gl_textures)
+	}
 
 	// Enable backface culling
 	// gl.Enable(gl.CULL_FACE)

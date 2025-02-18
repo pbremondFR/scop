@@ -250,7 +250,11 @@ trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trim
 }
 
 @(private="file")
-parse_obj_vertex_statement :: proc(statement: string, split_statement: []string, obj_data: ^WavefrontObjData, active_material: string) -> ParseResult
+parse_obj_vertex_statement :: proc(
+	statement: string,
+	split_statement: []string,
+	obj_data: ^WavefrontObjData,
+	active_material: string) -> ParseResult
 {
 	switch split_statement[0] {
 		case "v":
@@ -271,7 +275,24 @@ parse_obj_vertex_statement :: proc(statement: string, split_statement: []string,
 	return .Ok
 }
 
-parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjData, materials: map[string]WavefrontMaterial, ok: bool) {
+@(private="file")
+make_WavefrontObjData :: proc(allocator := context.allocator) -> WavefrontObjData
+{
+	retval: WavefrontObjData
+	retval.vert_positions = make([dynamic]Vec3f)
+	retval.tex_coords = make([dynamic]Vec3f)
+	retval.normals = make([dynamic]Vec3f)
+	retval.vertex_indices = make([dynamic]WavefrontVertexID)
+	return retval
+}
+
+/*
+ * Parses a .obj file. Takes in what's meant to be a temporary/scratch allocator. Because the
+ * function's return values are only intermediate in the model loading process, the allocator
+ * can be deleted all at once.
+ */
+parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator) -> (obj_data: WavefrontObjData, materials: map[string]WavefrontMaterial, ok: bool)
+{
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
 		fmt.printfln("Error mapping `%v`: %v", obj_file_path, err)
@@ -279,18 +300,26 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjData, ma
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))
 
+	// Replace default allocator by custom one provided
+	old_allocator := context.allocator
+	defer context.allocator = old_allocator
+	context.allocator = temp_allocator
+
+	// Init return values using provided allocator
+	obj_data = make_WavefrontObjData(temp_allocator)
+	materials = make(map[string]WavefrontMaterial, temp_allocator)
+
 	working_dir := filepath.dir(obj_file_path)
 	file_name := filepath.base(obj_file_path) // Just a slice, no alloc
-	defer delete(working_dir)
+	// defer delete(working_dir)
 
 	active_material_name := DEFAULT_MATERIAL_NAME
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
 	it := string(file_contents)
 	line_number := 0
 	for line in strings.split_lines_iterator(&it) {
 		line_number += 1
-		trimmed, split_line := trim_and_split_line(line, context.temp_allocator)
+		trimmed, split_line := trim_and_split_line(line, temp_allocator)
 		if (len(trimmed) == 0) {
 			continue
 		}
@@ -303,7 +332,7 @@ parse_obj_file :: proc(obj_file_path: string) -> (obj_data: WavefrontObjData, ma
 
 		switch split_line[0] {
 			case "mtllib":
-				materials = parse_mtl_file(split_line[1], working_dir, context.temp_allocator) or_return
+				materials = parse_mtl_file(split_line[1], working_dir, temp_allocator) or_return
 			case "usemtl":
 				if split_line[1] not_in materials {
 					log_warning("%v:%v: Material `%v' is not found in current materials", file_name, line_number, split_line[1])

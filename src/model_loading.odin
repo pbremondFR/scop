@@ -46,7 +46,7 @@ load_model :: proc(obj_file_path: string) -> (model: GlModel, materials: map[str
 {
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	obj_data, mtl_materials, obj_ok := parse_obj_file(obj_file_path)
+	obj_data, mtl_materials, obj_ok := parse_obj_file(obj_file_path, context.temp_allocator)
 	// XXX: These defer calls are fine even in case of error
 	defer {
 		// delete_WavefrontObjFile(obj_data)
