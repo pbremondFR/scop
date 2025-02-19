@@ -95,8 +95,7 @@ parse_mtl_statement :: proc(split_line: []string, materials: ^map[string]Wavefro
 
 	switch split_line[0] {
 		case "newmtl":
-			active_material_name := split_line[1]
-			new_material := get_default_material(active_material_name)
+			new_material := get_default_material(split_line[1])
 			materials[new_material.name] = new_material
 			active_material_ptr^ = &materials[new_material.name]
 		case "Ka":
@@ -106,11 +105,14 @@ parse_mtl_statement :: proc(split_line: []string, materials: ^map[string]Wavefro
 		case "Ks":
 			if !parse_vec3(split_line[1:], &active_material.Ks) do return .Failure
 		case "Ns":
-			active_material.Ns = strconv.parse_f32(split_line[1]) or_else 32
+			active_material.Ns = strconv.parse_f32(split_line[1]) or_else -1
+			if active_material.Ns == -1 do return .Failure
 		case "Tr":
-			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else 0.0)
+			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else -1)
+			if active_material.d == -1 do return .Failure
 		case "d":
-			active_material.d = strconv.parse_f32(split_line[1]) or_else 0.0
+			active_material.d = strconv.parse_f32(split_line[1]) or_else -1
+			if active_material.d == -1 do return .Failure
 		case "map_Ka":
 			active_material.texture_paths[.Map_Ka] = strings.clone(split_line[1])
 		case "map_Kd":
