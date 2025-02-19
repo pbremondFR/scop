@@ -18,6 +18,7 @@ layout(std140, binding = 0) uniform uMaterials{
 uniform vec3 light_pos;
 uniform vec3 light_color;
 uniform vec3 view_pos;
+uniform float texture_factor;	// Multiply each texture color by this factor
 
 // Representation of the TextureUnit enum in the Odin code. Corresponds to the N-th
 // least-significant bit of the material's `enabled_textures`. If the bit is set,
@@ -75,8 +76,10 @@ vec3	get_normal()
 vec3	calc_ambient()
 {
 	vec3 ambient_color = materials[MtlID].Ka;
-	if (texture_enabled(MAP_KA))
-		ambient_color *= texture(texture_Ka, Uv).rgb;
+	if (texture_enabled(MAP_KA)) {
+		vec3 texture_color = texture(texture_Ka, Uv).rgb;
+		ambient_color = mix(ambient_color, ambient_color * texture_color, texture_factor);
+	}
 	vec3 ambient_lighting = vec3(0.2, 0.2, 0.2);
 	vec3 ambient = ambient_color * ambient_lighting;
 
@@ -86,8 +89,10 @@ vec3	calc_ambient()
 vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 {
 	vec3 diffuse_color = materials[MtlID].Kd;
-	if (texture_enabled(MAP_KD))
-		diffuse_color *= texture(texture_Kd, Uv).rgb;
+	if (texture_enabled(MAP_KD)) {
+		vec3 texture_color = texture(texture_Kd, Uv).rgb;
+		diffuse_color = mix(diffuse_color, diffuse_color * texture_color, texture_factor);
+	}
 	float diff = max(dot(norm, lightDir), 0.0);
 	vec3 diffuse = diff * diffuse_color * light_color;
 
@@ -97,8 +102,10 @@ vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 vec3	calc_specular(vec3 norm, vec3 lightDir)
 {
 	vec3 spec_color = materials[MtlID].Ks;
-	if (texture_enabled(MAP_KS))
-		spec_color *= texture(texture_Ks, Uv).rgb;
+	if (texture_enabled(MAP_KS)) {
+		vec3 texture_color = texture(texture_Ks, Uv).rgb;
+		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
+	}
 	float spec_exponent = materials[MtlID].Ns;
 	// XXX: Disable all scalar textures, can't be bothered
 	// if (texture_enabled(MAP_NS))

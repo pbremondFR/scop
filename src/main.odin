@@ -58,8 +58,6 @@ PLAYER_FOV_SPEED		:f32 : 1
 ShaderProgram :: enum {
 	FaceNormals,
 	VertNormals,
-	Texture,
-	RawMaterial,
 	DefaultShader,
 	TransparencyShader,
 	// XXX: LEAVE THESE ONES LAST AND IN THIS ORDER
@@ -79,6 +77,8 @@ State :: struct {
 	shader_program: ShaderProgram,
 	enable_normals_view: bool,
 	normals_view_length: f32,
+	show_textures: bool,
+	texture_factor: f32,
 }
 
 state := State{
@@ -86,6 +86,8 @@ state := State{
 	fov = math.to_radians_f32(70.0),
 	shader_program = .DefaultShader,
 	normals_view_length = 1.0,
+	show_textures = true,
+	texture_factor = 1.0,
 }
 
 // For tracking allocator below (leaks/double free debugging)
@@ -132,8 +134,6 @@ main :: proc() {
 	shader_programs := [ShaderProgram]u32 {
 		.FaceNormals		= get_shader_program("shaders/vertex.vert", "shaders/face_normals.frag") or_else 0,
 		.VertNormals		= get_shader_program("shaders/vertex.vert", "shaders/vert_normals.frag") or_else 0,
-		.Texture			= get_shader_program("shaders/vertex.vert", "shaders/texture.frag") or_else 0,
-		.RawMaterial		= get_shader_program("shaders/vertex.vert", "shaders/raw_material.frag") or_else 0,
 		.DefaultShader		= get_shader_program("shaders/vertex.vert", "shaders/default.frag") or_else 0,
 		.TransparencyShader	= get_shader_program("shaders/vertex.vert", "shaders/transparency.frag") or_else 0,
 		.VertNormVectors	= get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
@@ -210,6 +210,8 @@ main :: proc() {
 		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * main_model.wPosition
 		// TODO: Determine far plane distance based on object size?
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 1500)
+		state.texture_factor += f32(state.dt if state.show_textures else -state.dt)
+		state.texture_factor = clamp(state.texture_factor, 0.0, 1.0)
 
 		set_shader_uniform(shader_programs[state.shader_program], "model", &model_matrix)
 		set_shader_uniform(shader_programs[state.shader_program], "view", &state.camera.mat)
@@ -217,6 +219,7 @@ main :: proc() {
 		set_shader_uniform(shader_programs[state.shader_program], "light_pos", &state.light_source_pos)
 		set_shader_uniform(shader_programs[state.shader_program], "light_color", &Vec3f{1, 1, 1})
 		set_shader_uniform(shader_programs[state.shader_program], "view_pos", &state.camera.pos)
+		set_shader_uniform(shader_programs[state.shader_program], "texture_factor", state.texture_factor)
 		// Precomputing the MVP matrix saves a lot of computation time on the GPU
 		mvp_matrix := proj_matrix * state.camera.mat * model_matrix
 		set_shader_uniform(shader_programs[state.shader_program], "mvp", &mvp_matrix)
@@ -460,6 +463,9 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 		STEP :: 0.25
 		delta :f32 = -STEP if key == glfw.KEY_COMMA else STEP;
 		state.normals_view_length = math.max(state.normals_view_length + delta, 0 + STEP)
+	}
+	else if key == glfw.KEY_T && action == glfw.PRESS {
+		state.show_textures = !state.show_textures
 	}
 
 	if action == glfw.PRESS {
