@@ -9,7 +9,7 @@ import "core:mem"
 import gl "vendor:OpenGL"
 import clang "core:c"
 
-compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (shader_id: u32, ok: bool) {
+compile_shader_from_source :: proc(shader_source: string, shader_name: string, shader_type: u32) -> (shader_id: u32, ok: bool) {
 	shader_id = gl.CreateShader(shader_type)
 	shader_source_cast := cstring(raw_data(shader_source))
 	len := i32(len(shader_source))
@@ -22,7 +22,7 @@ compile_shader_from_source :: proc(shader_source: string, shader_type: u32) -> (
 		error_str: [512]u8
 		assert(size_of(error_str) == 512)
 		gl.GetShaderInfoLog(shader_id, size_of(error_str), nil, raw_data(error_str[:]));
-		fmt.printfln("Error compiling shader: %v", string(error_str[:]))
+		log_error("Failed to compile %s:\n%s", shader_name, string(error_str[:]))
 	}
 	else {
 		ok = true
@@ -43,11 +43,11 @@ get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path:
 	fs_data := os.read_entire_file(frag_shader_path) or_return
 	defer delete(fs_data)
 
-	vert_shader := compile_shader_from_source(string(vs_data), gl.VERTEX_SHADER) or_return
+	vert_shader := compile_shader_from_source(string(vs_data), vert_shader_path, gl.VERTEX_SHADER) or_return
 	defer gl.DeleteShader(vert_shader)
 	fmt.printfln("Compiled %v", vert_shader_path)
 
-	frag_shader := compile_shader_from_source(string(fs_data), gl.FRAGMENT_SHADER) or_return
+	frag_shader := compile_shader_from_source(string(fs_data), frag_shader_path, gl.FRAGMENT_SHADER) or_return
 	defer gl.DeleteShader(frag_shader)
 	fmt.printfln("Compiled %v", frag_shader_path)
 
@@ -62,7 +62,7 @@ get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path:
 		error_str: [512]u8
 		assert(size_of(error_str) == 512)
 		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
-		fmt.println("Error linking shader:", string(error_str[:]))
+		log_error("Failed to link shader:", string(error_str[:]))
 	}
 
 	ok = (success != 0)
@@ -80,15 +80,15 @@ get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, ge
 	gs_data := os.read_entire_file(geom_shader_path) or_return
 	defer delete(gs_data)
 
-	vert_shader := compile_shader_from_source(string(vs_data), gl.VERTEX_SHADER) or_return
+	vert_shader := compile_shader_from_source(string(vs_data), vert_shader_path, gl.VERTEX_SHADER) or_return
 	defer gl.DeleteShader(vert_shader)
 	fmt.printfln("Compiled %v", vert_shader_path)
 
-	geom_shader := compile_shader_from_source(string(gs_data), gl.GEOMETRY_SHADER) or_return
+	geom_shader := compile_shader_from_source(string(gs_data),frag_shader_path, gl.GEOMETRY_SHADER) or_return
 	defer gl.DeleteShader(geom_shader)
 	fmt.printfln("Compiled %v", geom_shader_path)
 
-	frag_shader := compile_shader_from_source(string(fs_data), gl.FRAGMENT_SHADER) or_return
+	frag_shader := compile_shader_from_source(string(fs_data), geom_shader_path, gl.FRAGMENT_SHADER) or_return
 	defer gl.DeleteShader(frag_shader)
 	fmt.printfln("Compiled %v", frag_shader_path)
 
@@ -104,7 +104,7 @@ get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, ge
 		error_str: [512]u8
 		assert(size_of(error_str) == 512)
 		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
-		fmt.println("Error linking shader:", string(error_str[:]))
+		log_error("Failed to link shader:", string(error_str[:]))
 	}
 
 	ok = (success != 0)

@@ -33,6 +33,7 @@ import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 import "core:strings"
+import "core:slice"
 import "base:runtime"
 
 import "core:os"
@@ -138,11 +139,9 @@ main :: proc() {
 		.VertNormVectors	= get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
 		.LightSource		= get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
-	for program in shader_programs {
-		if program == 0 {
-			fmt.println("Error creating shaders")
-			return
-		}
+	if slice.contains(slice.enumerated_array(&shader_programs), 0) {
+		fmt.println("Error creating shaders")
+		return
 	}
 	defer for id in shader_programs do gl.DeleteProgram(id)
 
