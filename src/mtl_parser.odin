@@ -98,7 +98,9 @@ parse_mtl_statement :: proc(split_line: []string, materials: ^map[string]Wavefro
 	return .Ok
 }
 
-parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
+parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) \
+	-> (materials: map[string]WavefrontMaterial, ok: bool)
+{
 	mtl_file_path := filepath.join({working_dir, mtl_file_name})
 	defer delete(mtl_file_path)
 
@@ -127,9 +129,11 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 			continue
 		}
 
-		// We should never get less than two tokens! Ignore this line as it is invalid, but don't error out.
+		// We should never get less than two tokens! Ignore this line as it is invalid,
+		// but don't error out.
 		if len(split_line) < 2 {
-			log_warning("%v:%v: incorrect .mtl statement has less than 2 tokens: `%v'", mtl_file_name, line_number, line)
+			log_warning("%v:%v: incorrect .mtl statement has less than 2 tokens: `%v'",
+				mtl_file_name, line_number, line)
 			continue
 		}
 
@@ -138,6 +142,7 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials
 				log_note("%v:%v: unsupported %v directive", mtl_file_name, line_number, split_line[0])
 			case .Failure:
 				log_error("%v:%v: failed to parse statement", mtl_file_name, line_number)
+				return
 
 		}
 	}

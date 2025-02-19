@@ -96,7 +96,8 @@ delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
 
-get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME) -> WavefrontMaterial {
+get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME, loc := #caller_location) -> WavefrontMaterial {
+	fmt.eprintln("Hello from", name, "called from", loc)
 	return WavefrontMaterial {
 		name = strings.clone(name),
 
@@ -306,8 +307,9 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 	context.allocator = temp_allocator
 
 	// Init return values using provided allocator
-	obj_data = make_WavefrontObjData(context.allocator)
-	materials = make(map[string]WavefrontMaterial, context.allocator)
+	obj_data = make_WavefrontObjData()
+	materials = make(map[string]WavefrontMaterial)
+	materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 
 	working_dir := filepath.dir(obj_file_path)
 	file_name := filepath.base(obj_file_path) // Just a slice, no alloc
@@ -353,11 +355,6 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 
 	fmt.printfln("=== Loaded model %v:\n=== %v vertices\n=== %v UVs\n=== %v normals\n=== %v vertex indices\n=== %v materials",
 		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices), len(materials))
-
-	if len(materials) == 0 {
-		// map_insert(&materials, DEFAULT_MATERIAL_NAME, get_default_material())
-		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
-	}
 
 	// Assign each material a unique index
 	index: u32 = 0
