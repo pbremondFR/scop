@@ -145,9 +145,7 @@ main :: proc() {
 			return
 		}
 	}
-	defer {
-		for id in shader_programs do gl.DeleteProgram(id)
-	}
+	defer for id in shader_programs do gl.DeleteProgram(id)
 
 	// === LOAD LIGHT CUBE ===
 	light_vao, light_vbo := create_light_source()
@@ -168,17 +166,11 @@ main :: proc() {
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_decal", i32(TextureUnit.Decal))
 	gl.UseProgram(shader_programs[state.shader_program])
 
-	main_model, gl_materials, gl_textures, model_ok := load_model(os.args[1])
+	main_model, model_ok := load_model(os.args[1])
 	if !model_ok {
 		fmt.println("fuck")
 	}
-	defer {
-		delete_GlModel(&main_model)
-		for _, &material in gl_materials do delete(material.name)
-		delete(gl_materials)
-		gl.DeleteTextures(i32(len(gl_textures)), cast([^]u32)&gl_textures)
-		delete(gl_textures)
-	}
+	defer delete_FinalModel(&main_model)
 
 	// Enable backface culling
 	// gl.Enable(gl.CULL_FACE)
@@ -231,15 +223,15 @@ main :: proc() {
 		mvp_matrix := proj_matrix * state.camera.mat * model_matrix
 		set_shader_uniform(shader_programs[state.shader_program], "mvp", &mvp_matrix)
 
-		gl.BindVertexArray(main_model.vao)
+		gl.BindVertexArray(main_model.gl_model.vao)
 
 		// TODO: Measure performance impact of these two methods
 		// OLD WAY: DRAW EVERYTHING
-		// gl.DrawElements(gl.TRIANGLES, main_model.ebo_len, gl.UNSIGNED_INT, nil)
+		// gl.DrawElements(gl.TRIANGLES, main_model.gl_model.ebo_len, gl.UNSIGNED_INT, nil)
 
 		// NEW WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
-		for range in main_model.index_ranges {
-			for _, &material in gl_materials {
+		for range in main_model.gl_model.index_ranges {
+			for _, &material in main_model.gl_materials {
 				if material.index == range.material_index {
 					for unit in TextureUnit {
 						if material.textures[unit] == 0 {
@@ -258,7 +250,7 @@ main :: proc() {
 			gl.UseProgram(shader_programs[.VertNormVectors])
 			set_shader_uniform(shader_programs[.VertNormVectors], "mvp", &mvp_matrix)
 			set_shader_uniform(shader_programs[.VertNormVectors], "vec_norm_len", state.normals_view_length)
-			gl.DrawElements(gl.POINTS, main_model.ebo_len, gl.UNSIGNED_INT, nil)
+			gl.DrawElements(gl.POINTS, main_model.gl_model.ebo_len, gl.UNSIGNED_INT, nil)
 		}
 
 		// === DRAW LIGHT CUBE ===

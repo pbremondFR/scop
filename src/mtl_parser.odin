@@ -35,13 +35,13 @@ parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
  * What's that? DRY? Nah. WET. We Enjoy Typing.
  */
 @(private="file")
-trim_and_split_line :: proc(line: string, allocator: runtime.Allocator) -> (trimmed: string, split: []string)
+trim_and_split_line :: proc(line: string) -> (trimmed: string, split: []string)
 {
 	 hash_index := strings.index_byte(line, '#')
 	 trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
 	 trimmed = strings.trim_space(trimmed)
 	 // Split current line into tokens with temp_allocator to parse easily
-	 split = strings.fields(trimmed, allocator)
+	 split = strings.fields(trimmed)
 	 return
 }
 
@@ -98,7 +98,7 @@ parse_mtl_statement :: proc(split_line: []string, materials: ^map[string]Wavefro
 	return .Ok
 }
 
-parse_mtl_file :: proc(mtl_file_name: string, working_dir: string, allocator: runtime.Allocator) -> (materials: map[string]WavefrontMaterial, ok: bool) {
+parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) -> (materials: map[string]WavefrontMaterial, ok: bool) {
 	mtl_file_path := filepath.join({working_dir, mtl_file_name})
 	defer delete(mtl_file_path)
 
@@ -122,7 +122,7 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string, allocator: ru
 	it := string(file_contents)
 	for line in strings.split_lines_iterator(&it) {
 		line_number += 1
-		trimmed, split_line := trim_and_split_line(line, allocator)
+		trimmed, split_line := trim_and_split_line(line)
 		if (len(trimmed) == 0) {
 			continue
 		}

@@ -42,17 +42,32 @@ camera_pos         │                   │
              ╚══════════════╝
 */
 
-load_model :: proc(obj_file_path: string) -> (model: GlModel, materials: map[string]GlMaterial, textures: []GlTextureID, ok: bool)
+FinalModel :: struct {
+	gl_model: GlModel,
+	gl_materials: map[string]GlMaterial,
+	materials_ubo: u32,
+	gl_textures: []GlTextureID,
+}
+
+delete_FinalModel :: proc(model: ^FinalModel)
+{
+	delete_GlModel(&model.gl_model)
+
+	for _, &material in model.gl_materials do delete(material.name)
+	delete(model.gl_materials)
+
+	gl.DeleteBuffers(1, &model.materials_ubo)
+
+	gl.DeleteTextures(i32(len(model.gl_textures)), cast([^]u32)&model.gl_textures)
+	delete(model.gl_textures)
+}
+
+load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 {
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
+	// obj_data and mtl_materials are allocated with scratch allocator
 	obj_data, mtl_materials, obj_ok := parse_obj_file(obj_file_path, context.temp_allocator)
-	// XXX: These defer calls are fine even in case of error
-	defer {
-		// delete_WavefrontObjFile(obj_data)
-		for _, &mtl in mtl_materials do delete_WavefrontMaterial(mtl)
-		delete(mtl_materials)
-	}
 	if !obj_ok {
 		fmt.printfln("Failed to load `%v`", obj_file_path)
 		return
@@ -72,19 +87,12 @@ load_model :: proc(obj_file_path: string) -> (model: GlModel, materials: map[str
 		fmt.println("Error loading textures")
 		return
 	}
-	// defer {
-	// 	gl.DeleteTextures(i32(len(gl_textures)), cast([^]u32)&gl_textures)
-	// 	delete(gl_textures)
-	// 	for _, &material in gl_materials do delete(material.name)
-	// 	delete(gl_materials)
-	// }
 
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
-	defer gl.DeleteBuffers(1, &ubo)
 	assert(ubo != 0)
 
-	return gl_model, gl_materials, gl_textures, true
+	return FinalModel{gl_model, gl_materials, ubo, gl_textures}, true
 }
 
 

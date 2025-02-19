@@ -306,8 +306,8 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 	context.allocator = temp_allocator
 
 	// Init return values using provided allocator
-	obj_data = make_WavefrontObjData(temp_allocator)
-	materials = make(map[string]WavefrontMaterial, temp_allocator)
+	obj_data = make_WavefrontObjData(context.allocator)
+	materials = make(map[string]WavefrontMaterial, context.allocator)
 
 	working_dir := filepath.dir(obj_file_path)
 	file_name := filepath.base(obj_file_path) // Just a slice, no alloc
@@ -332,7 +332,7 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 
 		switch split_line[0] {
 			case "mtllib":
-				materials = parse_mtl_file(split_line[1], working_dir, temp_allocator) or_return
+				materials = parse_mtl_file(split_line[1], working_dir) or_return
 			case "usemtl":
 				if split_line[1] not_in materials {
 					log_warning("%v:%v: Material `%v' is not found in current materials", file_name, line_number, split_line[1])
@@ -343,7 +343,7 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 			case:	// Handle vertex directives in their own functions
 				#partial switch parse_obj_vertex_statement(trimmed, split_line, &obj_data, active_material_name) {
 					case .Unsupported:
-						log_warning("%v:%v: unsupported %v directive", file_name, line_number, split_line[0])
+						log_note("%v:%v: unsupported %v directive", file_name, line_number, split_line[0])
 					case .Failure:
 						log_error("%v:%v: failed to parse statement", file_name, line_number)
 						return
@@ -355,6 +355,7 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 		obj_file_path, len(obj_data.vert_positions), len(obj_data.tex_coords), len(obj_data.normals), len(obj_data.vertex_indices), len(materials))
 
 	if len(materials) == 0 {
+		// map_insert(&materials, DEFAULT_MATERIAL_NAME, get_default_material())
 		materials[DEFAULT_MATERIAL_NAME] = get_default_material()
 	}
 
