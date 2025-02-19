@@ -70,43 +70,6 @@ TextureUnit :: enum u32 {
 	Decal,
 }
 
-WavefrontMaterial :: struct {
-	name: string "Material name",
-	index: u32 "Material index",
-
-	Ka: Vec3f "Ambient color",
-	Kd: Vec3f "Diffuse color",
-	Ks: Vec3f "Specular color",
-	Ns: f32 "Specular exponent",
-	d: f32 "Dissolve", // Also known as "Tr" (1 - dissolve)
-	Tf: Vec3f "Transmission filter color",
-	Ni: f32 "Index of refraction",
-	illum: IlluminationModel "Illumination model",
-
-	texture_paths: [TextureUnit]string,
-}
-
-delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
-	// TODO: delete strings of maps if I ever get around to implementing that
-	delete(mtl.name)
-	for path in mtl.texture_paths {
-		delete(path)
-	}
-}
-
-DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
-
-get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME, loc := #caller_location) -> WavefrontMaterial {
-	return WavefrontMaterial {
-		name = strings.clone(name),
-
-		Ka = {0.4, 0.4, 0.4},
-		Kd = {0.5, 0.5, 0.5},
-		Ks = {0.5, 0.5, 0.5},
-		Ns = 39,
-	}
-}
-
 WavefrontObjData :: struct {
 	vert_positions:	[dynamic]Vec3f,
 	tex_coords:	[dynamic]Vec3f,	// Usually 2D textures, no need to handle 3D textures, right?
@@ -115,12 +78,13 @@ WavefrontObjData :: struct {
 	vertex_indices:	[dynamic]WavefrontVertexID,
 }
 
-delete_WavefrontObjFile :: proc(data: WavefrontObjData) {
+delete_WavefrontObjData :: proc(data: WavefrontObjData) {
 	delete(data.vert_positions)
 	delete(data.tex_coords)
 	delete(data.normals)
 	delete(data.vertex_indices)
 }
+
 @(private="file")
 parse_vertex :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
@@ -132,6 +96,7 @@ parse_vertex :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	append(&obj_data.vert_positions, vertex)
 	return true
 }
+
 @(private="file")
 parse_vertex_texture :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) >= 1)
@@ -143,6 +108,7 @@ parse_vertex_texture :: proc(obj_data: ^WavefrontObjData, split_str: []string) -
 	append(&obj_data.tex_coords, vertex)
 	return true
 }
+
 @(private="file")
 parse_vertex_normal :: proc(obj_data: ^WavefrontObjData, split_str: []string) -> bool {
 	assert(len(split_str) == 3)
@@ -276,7 +242,7 @@ parse_obj_vertex_statement :: proc(
 }
 
 @(private="file")
-make_WavefrontObjData :: proc(allocator := context.allocator) -> WavefrontObjData
+make_WavefrontObjData :: proc() -> WavefrontObjData
 {
 	retval: WavefrontObjData
 	retval.vert_positions = make([dynamic]Vec3f)
@@ -371,7 +337,7 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
  * This function consumes the material map and clears its contents. The ownership of the WavefrontMaterial
  * structure is passed to the array.
  */
- @(private="file")
+@(private="file")
 consume_materials_map_to_array :: proc(materials_map: ^map[string]WavefrontMaterial) -> []WavefrontMaterial {
 	materials_array := make([]WavefrontMaterial, len(materials_map))
 

@@ -6,6 +6,42 @@ import "core:mem/virtual"
 import "core:path/filepath"
 import "base:runtime"
 
+WavefrontMaterial :: struct {
+	name: string "Material name",
+	index: u32 "Material index",
+
+	Ka: Vec3f "Ambient color",
+	Kd: Vec3f "Diffuse color",
+	Ks: Vec3f "Specular color",
+	Ns: f32 "Specular exponent",
+	d: f32 "Dissolve", // Also known as "Tr" (1 - dissolve)
+	Tf: Vec3f "Transmission filter color",
+	Ni: f32 "Index of refraction",
+	illum: IlluminationModel "Illumination model",
+
+	texture_paths: [TextureUnit]string,
+}
+
+delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
+	delete(mtl.name)
+	for path in mtl.texture_paths {
+		delete(path)
+	}
+}
+
+DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
+
+get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME, loc := #caller_location) -> WavefrontMaterial {
+	return WavefrontMaterial {
+		name = strings.clone(name),
+
+		Ka = {0.4, 0.4, 0.4},
+		Kd = {0.5, 0.5, 0.5},
+		Ks = {0.5, 0.5, 0.5},
+		Ns = 39,
+	}
+}
+
 @(private="file")
 parse_vec3 :: proc(split_str: []string, output: ^Vec3f) -> (ok: bool) {
 	if len(split_str) < 3 {
@@ -37,12 +73,11 @@ parse_vec2 :: proc(split_str: []string, output: ^Vec2f) -> (ok: bool) {
 @(private="file")
 trim_and_split_line :: proc(line: string) -> (trimmed: string, split: []string)
 {
-	 hash_index := strings.index_byte(line, '#')
-	 trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
-	 trimmed = strings.trim_space(trimmed)
-	 // Split current line into tokens with temp_allocator to parse easily
-	 split = strings.fields(trimmed)
-	 return
+	hash_index := strings.index_byte(line, '#')
+	trimmed = line[0:(hash_index if hash_index >= 0 else len(line))]
+	trimmed = strings.trim_space(trimmed)
+	split = strings.fields(trimmed)
+	return
 }
 
 @(private="file")
