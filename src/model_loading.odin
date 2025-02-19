@@ -44,6 +44,7 @@ camera_pos         │                   │
 
 FinalModel :: struct {
 	gl_model: GlModel,
+	wPosition: Mat4f,
 	gl_materials: map[string]GlMaterial,
 	materials_ubo: u32,
 	gl_textures: []GlTextureID,
@@ -73,7 +74,8 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 		return
 	}
 
-	set_camera_and_model_pos(obj_data)
+	set_camera_and_light_pos(obj_data)
+	model_pos := get_model_offset_matrix(obj_data)
 
 	// === LOAD MODEL ===
 	gl_model := obj_data_to_gl_objects(&obj_data, mtl_materials)
@@ -92,14 +94,13 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
 	assert(ubo != 0)
 
-	return FinalModel{gl_model, gl_materials, ubo, gl_textures}, true
+	return FinalModel{gl_model, model_pos, gl_materials, ubo, gl_textures}, true
 }
 
 
 @(private="file")
-set_camera_and_model_pos :: proc(obj_data: WavefrontObjData)
+set_camera_and_light_pos :: proc(obj_data: WavefrontObjData)
 {
-	state.model_offset = get_model_offset_matrix(obj_data)
 	state.camera.pos = get_initial_camera_pos(obj_data)
 	state.camera.mat = get_camera_matrix(state.camera.pos, 0, 0)
 	state.light_source_pos = Vec3f{

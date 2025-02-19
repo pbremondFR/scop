@@ -72,7 +72,6 @@ State :: struct {
 	dt: f64,
 	glfw_inputs: map[i32]bool,
 
-	model_offset: Mat4f,
 	camera: PlayerCamera,
 	light_source_pos: Vec3f,
 	enable_model_spin: bool,
@@ -155,6 +154,7 @@ main :: proc() {
 		gl.DeleteBuffers(1, &light_vbo)
 	}
 
+	// Assign texture units to shader uniforms. They don't need to be dynamic, so they just match the enum.
 	gl.UseProgram(shader_programs[.DefaultShader])
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_Ka", i32(TextureUnit.Map_Ka))
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_Kd", i32(TextureUnit.Map_Kd))
@@ -166,6 +166,7 @@ main :: proc() {
 	set_shader_uniform(shader_programs[.DefaultShader], "texture_decal", i32(TextureUnit.Decal))
 	gl.UseProgram(shader_programs[state.shader_program])
 
+	// === LOAD MAIN MODEL ===
 	main_model, model_ok := load_model(os.args[1])
 	if !model_ok {
 		fmt.println("fuck")
@@ -209,7 +210,7 @@ main :: proc() {
 		if state.enable_model_spin {
 			time_accum += state.dt
 		}
-		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * state.model_offset
+		model_matrix := get_rotation_matrix4_y_axis(cast(f32)time_accum) * main_model.wPosition
 		// TODO: Determine far plane distance based on object size?
 		proj_matrix := get_perspective_projection_matrix(state.fov, aspect_ratio, 0.1, 1500)
 

@@ -97,7 +97,6 @@ delete_WavefrontMaterial :: proc(mtl: WavefrontMaterial) {
 DEFAULT_MATERIAL_NAME : string : "__SCOP_DEFAULT_MATERIAL"
 
 get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME, loc := #caller_location) -> WavefrontMaterial {
-	fmt.eprintln("Hello from", name, "called from", loc)
 	return WavefrontMaterial {
 		name = strings.clone(name),
 
