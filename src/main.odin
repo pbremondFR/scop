@@ -139,11 +139,9 @@ main :: proc() {
 		.VertNormVectors	= get_shader_program("shaders/vert_norm_vectors.vert", "shaders/vert_norm_vectors.frag", "shaders/vert_norm_vectors.geom") or_else 0,
 		.LightSource		= get_shader_program("shaders/light_source.vert", "shaders/light_source.frag") or_else 0,
 	}
-	if slice.contains(slice.enumerated_array(&shader_programs), 0) {
-		fmt.println("Error creating shaders")
-		return
-	}
-	defer for id in shader_programs do gl.DeleteProgram(id)
+	if slice.contains(slice.enumerated_array(&shader_programs), 0) do return
+	// Braces here are optional, but better for readability IMO
+	defer { for id in shader_programs do gl.DeleteProgram(id) }
 
 	// === LOAD LIGHT CUBE ===
 	light_vao, light_vbo := create_light_source()

@@ -37,10 +37,21 @@ get_shader_program :: proc{
 
 // Not allowed to load shaders with a library, so no gl utils from Odin :(
 get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path: string) -> (program_id: u32, ok: bool) {
-	vs_data := os.read_entire_file(vert_shader_path) or_return
+	read_ok := true
+	vs_data, fs_data: []byte
+
+	vs_data, read_ok = os.read_entire_file(vert_shader_path)
+	if !read_ok {
+		log_error("Failed to open %v", vert_shader_path)
+		return
+	}
 	defer delete(vs_data)
 
-	fs_data := os.read_entire_file(frag_shader_path) or_return
+	fs_data, read_ok = os.read_entire_file(frag_shader_path)
+	if !read_ok {
+		log_error("Failed to open %v", frag_shader_path)
+		return
+	}
 	defer delete(fs_data)
 
 	vert_shader := compile_shader_from_source(string(vs_data), vert_shader_path, gl.VERTEX_SHADER) or_return
@@ -71,13 +82,28 @@ get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path:
 
 // Not allowed to load shaders with a library, so no gl utils from Odin :(
 get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, geom_shader_path: string) -> (program_id: u32, ok: bool) {
-	vs_data := os.read_entire_file(vert_shader_path) or_return
+	read_ok := true
+	vs_data, fs_data, gs_data: []byte
+
+	vs_data, read_ok = os.read_entire_file(vert_shader_path)
+	if !read_ok {
+		log_error("Failed to open %v", vert_shader_path)
+		return
+	}
 	defer delete(vs_data)
 
-	fs_data := os.read_entire_file(frag_shader_path) or_return
+	fs_data, read_ok = os.read_entire_file(frag_shader_path)
+	if !read_ok {
+		log_error("Failed to open %v", frag_shader_path)
+		return
+	}
 	defer delete(fs_data)
 
-	gs_data := os.read_entire_file(geom_shader_path) or_return
+	gs_data, read_ok = os.read_entire_file(geom_shader_path)
+	if !read_ok {
+		log_error("Failed to open %v", geom_shader_path)
+		return
+	}
 	defer delete(gs_data)
 
 	vert_shader := compile_shader_from_source(string(vs_data), vert_shader_path, gl.VERTEX_SHADER) or_return
