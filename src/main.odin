@@ -49,7 +49,7 @@ WINDOW_NAME :: "ft_scop"
 // Constant with explicit type for example
 GL_MAJOR_VERSION : c.int : 4
 // Constant with type inference
-GL_MINOR_VERSION :: 6
+GL_MINOR_VERSION :: 2
 
 PLAYER_TRANSLATE_SPEED	:f32 : 30
 PLAYER_ROTATION_SPEED	:f32 : 2

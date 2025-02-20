@@ -1,4 +1,4 @@
-#version 460 core
+#version 420 core
 
 struct MaterialProperties{
 	vec3	Ka;
@@ -57,14 +57,14 @@ bool texture_enabled(uint texture_unit)
 
 vec3	get_normal()
 {
-	if (texture_enabled(MAP_BUMP))
-	{
-		vec3 normal = texture(texture_bump, Uv).rgb;
-		// transform normal vector to range [-1,1]
-		normal = normalize(normal * 2.0 - 1.0);
-		return normal;
-	}
-	else
+	// if (texture_enabled(MAP_BUMP))
+	// {
+	// 	vec3 normal = texture(texture_bump, Uv).rgb;
+	// 	// transform normal vector to range [-1,1]
+	// 	normal = normalize(normal * 2.0 - 1.0);
+	// 	return normal;
+	// }
+	// else
 	{
 		vec3 normal = normalize(Normal);
 		if (length(normal) == 0) // No vertex normal, calc face normal

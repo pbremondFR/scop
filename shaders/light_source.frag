@@ -1,4 +1,4 @@
-#version 460 core
+#version 420 core
 
 uniform vec3 light_color;
 

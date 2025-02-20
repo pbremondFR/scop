@@ -10,7 +10,7 @@ uniform mat4 projection;
 
 out vec4 Pos;
 out vec2 Uv;
-out uint MtlID;
+flat out uint MtlID;
 out vec3 Normal;
 out vec3 FragPos;
 

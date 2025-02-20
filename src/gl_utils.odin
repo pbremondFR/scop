@@ -73,7 +73,7 @@ get_shader_program_vert_frag :: proc(vert_shader_path: string, frag_shader_path:
 		error_str: [512]u8
 		assert(size_of(error_str) == 512)
 		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
-		log_error("Failed to link shader:", string(error_str[:]))
+		log_error("Failed to link shader: %v", string(error_str[:]))
 	}
 
 	ok = (success != 0)
@@ -130,7 +130,7 @@ get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, ge
 		error_str: [512]u8
 		assert(size_of(error_str) == 512)
 		gl.GetProgramInfoLog(program_id, size_of(error_str), nil, raw_data(error_str[:]));
-		log_error("Failed to link shader:", string(error_str[:]))
+		log_error("Failed to link shader: %v", string(error_str[:]))
 	}
 
 	ok = (success != 0)
