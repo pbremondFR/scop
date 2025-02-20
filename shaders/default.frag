@@ -65,12 +65,18 @@ vec3	get_normal()
 	// 	return normal;
 	// }
 	// else
-	{
-		vec3 normal = normalize(Normal);
-		if (length(normal) == 0) // No vertex normal, calc face normal
-			normal = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
-		return normal;
-	}
+	if (length(Normal) == 0)
+		// return vec3(0, 1, 0);
+		return normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+	else
+		return normalize(Normal);
+	// {
+	// 	vec3 normal = normalize(Normal);
+	// 	if (length(normal) == 0) // No vertex normal, calc face normal
+	// 		// normal = vec3(0, 1, 0);
+	// 		normal = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+	// 	return normal;
+	// }
 }
 
 vec3	calc_ambient()
@@ -121,14 +127,15 @@ vec3	calc_specular(vec3 norm, vec3 lightDir)
 void main()
 {
 	// Calculate fragment's normal
-	vec3 norm = get_normal();
+	vec3 normal = get_normal();
 	// Calculate light source's direction
 	vec3 lightDir = normalize(light_pos - FragPos);
 
 	vec3 ambient = calc_ambient();
-	vec3 diffuse = calc_diffuse(norm, lightDir);
-	vec3 specular = calc_specular(norm, lightDir);
+	vec3 diffuse = calc_diffuse(normal, lightDir);
+	vec3 specular = calc_specular(normal, lightDir);
 
 	vec3 final_color = (ambient + diffuse + specular);
-	FragColor = vec4(final_color, 1.0);
+	// FIXME: It looks like specular lighting does not work on Linux???
+	FragColor = vec4(ambient + diffuse, 1.0);
 }
