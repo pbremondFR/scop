@@ -55,6 +55,8 @@ void main()
 	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
 	vec3 specular = spec * spec_color * light_color;
+	if (spec_exponent == 0)
+		specular = vec3(0);
 
 	vec4 texture_color = texture(ourTexture, Uv);
 
