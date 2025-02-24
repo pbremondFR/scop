@@ -1,16 +1,12 @@
 package main
 
-import "core:fmt"
-
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
+import "core:fmt"
 import "core:strings"
 import "core:slice"
-import "base:runtime"
-
 import "core:os"
-import "core:math/linalg"
 import "core:math"
 
 // For tracking allocator (debug)
@@ -238,44 +234,48 @@ main :: proc() {
 
 }
 
-get_initial_camera_pos :: proc(model: WavefrontObjData) -> Vec3f {
-	// Get bounding box around model
-	min, max: Vec3f
-	for v in model.vert_positions {
-		for i in 0..<3 {
-			if v[i] < min[i] do min[i] = v[i]
-			if v[i] > max[i] do max[i] = v[i]
-		}
-	}
-
-	// Good approximation of camera spacing around object. We don't need something ultra precise.
-	offset := f32(linalg.length((max - min).xz)) * 1
-	return {0.0, 0.0, -offset}
-}
-
-get_model_offset_matrix :: proc(model: WavefrontObjData) -> Mat4f {
-	// Get min and max points of bounding box around model
-	min, max: Vec3f
-	for v in model.vert_positions {
-		for i in 0..<3 {
-			if v[i] < min[i] do min[i] = v[i]
-			if v[i] > max[i] do max[i] = v[i]
-		}
-	}
-	half_diagonal := (max - min) /2
-	offset_vec := (min + half_diagonal) * -1
-	offset_mat := UNIT_MAT4F
-	offset_mat[3][0] = offset_vec.x
-	offset_mat[3][1] = offset_vec.y
-	offset_mat[3][2] = offset_vec.z
-	return offset_mat
-}
-
 get_light_cube_model_matrix :: proc(cube_position: Vec3f, time: f32) -> (cube_model_matrix: Mat4f) {
 	cube_model_matrix = UNIT_MAT4F
 	cube_model_matrix[3].xyz = cube_position
 	return cube_model_matrix * get_rotation_matrix4_x_axis(time) * get_rotation_matrix4_y_axis(time)
 }
+
+size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
+	gl.Viewport(0, 0, width, height)
+	state.window_size = {width, height}
+}
+
+init_OpenGL :: proc() -> (window: glfw.WindowHandle, ok: bool) {
+	if(glfw.Init() != true){
+		log_error("Failed to initialize GLFW")
+		return
+	}
+	glfw.WindowHint(glfw.RESIZABLE, 1)
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
+	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
+	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+
+	window = glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
+
+	if window == nil {
+		log_error("Failed to create window")
+		return
+	}
+
+	glfw.MakeContextCurrent(window)
+
+	// Enable vsync
+	glfw.SwapInterval(1)
+
+	glfw.SetKeyCallback(window, key_callback)
+
+	glfw.SetFramebufferSizeCallback(window, size_callback)
+
+	gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
+	ok = true
+	return
+}
+
 
 create_light_source :: proc() -> (light_vao, light_vbo: u32) {
 	cube_vertices := [?]f32{
@@ -337,143 +337,5 @@ create_light_source :: proc() -> (light_vao, light_vbo: u32) {
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)
 
-	return
-}
-
-process_player_movements :: proc() {
-	movement: Vec3f = {0, 0, 0}
-	look: Vec3f = {0, 0, 0}
-	fov_delta: f32 = 0
-
-	PITCH_LIMIT :: 1.55334
-
-	if state.glfw_inputs[glfw.KEY_W]			do movement.z += 1
-	if state.glfw_inputs[glfw.KEY_S]			do movement.z -= 1
-	if state.glfw_inputs[glfw.KEY_D]			do movement.x -= 1
-	if state.glfw_inputs[glfw.KEY_A]			do movement.x += 1
-	if state.glfw_inputs[glfw.KEY_SPACE]		do movement.y -= 1
-	if state.glfw_inputs[glfw.KEY_LEFT_SHIFT]	do movement.y += 1
-
-	if state.glfw_inputs[glfw.KEY_UP]		do look.y -= 1
-	if state.glfw_inputs[glfw.KEY_DOWN]		do look.y += 1
-	if state.glfw_inputs[glfw.KEY_LEFT]		do look.x -= 1
-	if state.glfw_inputs[glfw.KEY_RIGHT]	do look.x += 1
-	if state.glfw_inputs[glfw.KEY_Q]		do look.z += 1
-	if state.glfw_inputs[glfw.KEY_E]		do look.z -= 1
-
-	if state.glfw_inputs[glfw.KEY_Z]	do fov_delta += 1
-	if state.glfw_inputs[glfw.KEY_X]	do fov_delta -= 1
-
-	if length := linalg.length(movement); length != 0 {
-		movement /= length
-		movement *= f32(state.dt) * PLAYER_TRANSLATE_SPEED
-	}
-	if length := linalg.length(look); length != 0 {
-		look /= length
-		look *= f32(state.dt) * PLAYER_ROTATION_SPEED
-	}
-
-	pitch := look.y
-	yaw := look.x
-
-	// Clamp pitch to a limit, like in FPS games
-	state.camera.pitch = math.clamp(state.camera.pitch + pitch, -PITCH_LIMIT, PITCH_LIMIT)
-	state.camera.yaw += yaw
-
-	// Stabilize movement vector on horizontal plane
-	upwards_camera := get_rotation_matrix4_x_axis(-state.camera.pitch) * state.camera.mat
-	state.camera.pos += movement * Mat3f(upwards_camera)
-
-	// Apply camera matrix transformation
-	state.camera.mat = get_camera_matrix(state.camera.pos, state.camera.pitch, state.camera.yaw)
-	state.fov += fov_delta * f32(state.dt) * PLAYER_FOV_SPEED
-}
-
-
-key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
-	context = runtime.default_context()
-
-	// Exit program on escape pressed
-	if key == glfw.KEY_ESCAPE {
-		glfw.SetWindowShouldClose(window, true)
-	}
-	else if key == glfw.KEY_ENTER && action == glfw.PRESS {
-		// Static variables are like in C
-		@(static) wireframe := false
-		wireframe = !wireframe
-		// Odin-style ternary (looks cool, but a bit weird coming from C, order is different)
-		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE if wireframe else gl.FILL)
-		// You can also use C-style ternaries! YAAAAY
-		// gl.PolygonMode(gl.FRONT_AND_BACK, wireframe ? gl.LINE : gl.FILL)
-		if wireframe {
-			gl.Disable(gl.CULL_FACE)
-		} else {
-			gl.Enable(gl.CULL_FACE)
-		}
-	}
-	else if key == glfw.KEY_R && action == glfw.PRESS {
-		state.enable_model_spin = !state.enable_model_spin
-	}
-	else if key == glfw.KEY_F && action == glfw.PRESS {
-		state.light_source_pos = -state.camera.pos
-	}
-	else if (key >= glfw.KEY_1 && key <= glfw.KEY_4) && action == glfw.PRESS {
-		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
-		fmt.println("Selecting shader", selected_shader)
-		state.shader_program = selected_shader
-	}
-	else if key == glfw.KEY_N && action == glfw.PRESS {
-		state.enable_normals_view = !state.enable_normals_view
-	}
-	else if (key == glfw.KEY_COMMA || key == glfw.KEY_PERIOD) {
-		STEP :: 0.25
-		delta :f32 = -STEP if key == glfw.KEY_COMMA else STEP;
-		state.normals_view_length = math.max(state.normals_view_length + delta, 0 + STEP)
-	}
-	else if key == glfw.KEY_T && action == glfw.PRESS {
-		state.show_textures = !state.show_textures
-	}
-
-	if action == glfw.PRESS {
-		state.glfw_inputs[key] = true
-	}
-	else if action == glfw.RELEASE {
-		state.glfw_inputs[key] = false
-	}
-}
-
-size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
-	gl.Viewport(0, 0, width, height)
-	state.window_size = {width, height}
-}
-
-init_OpenGL :: proc() -> (window: glfw.WindowHandle, ok: bool) {
-	if(glfw.Init() != true){
-		log_error("Failed to initialize GLFW")
-		return
-	}
-	glfw.WindowHint(glfw.RESIZABLE, 1)
-	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
-	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
-	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-
-	window = glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
-
-	if window == nil {
-		log_error("Failed to create window")
-		return
-	}
-
-	glfw.MakeContextCurrent(window)
-
-	// Enable vsync
-	glfw.SwapInterval(1)
-
-	glfw.SetKeyCallback(window, key_callback)
-
-	glfw.SetFramebufferSizeCallback(window, size_callback)
-
-	gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
-	ok = true
 	return
 }

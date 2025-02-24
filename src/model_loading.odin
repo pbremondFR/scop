@@ -2,6 +2,7 @@ package main
 
 import gl "vendor:OpenGL"
 
+import "core:math/linalg"
 import "core:path/filepath"
 import "base:runtime"
 
@@ -105,4 +106,44 @@ set_camera_and_light_pos :: proc(obj_data: WavefrontObjData)
 		-state.camera.pos.z * 2,
 		0,
 	}
+}
+
+@(private="file")
+get_initial_camera_pos :: proc(model: WavefrontObjData) -> Vec3f {
+	// Get bounding box around model
+	min, max: Vec3f
+	for v in model.vert_positions {
+		for i in 0..<3 {
+			if v[i] < min[i] do min[i] = v[i]
+			if v[i] > max[i] do max[i] = v[i]
+		}
+	}
+
+	// Good approximation of camera spacing around object. We don't need something ultra precise.
+	offset := f32(linalg.length((max - min).xz)) * 1
+	return {0.0, 0.0, -offset}
+}
+
+
+/*
+ * Returns a matrix which offsets the position of a 3D model so that it's completely centered.
+ * In other words, the object's origin becomes the geometric center of its bounding box.
+ */
+@(private="file")
+get_model_offset_matrix :: proc(model: WavefrontObjData) -> Mat4f {
+	// Get min and max points of bounding box around model
+	min, max: Vec3f
+	for v in model.vert_positions {
+		for i in 0..<3 {
+			if v[i] < min[i] do min[i] = v[i]
+			if v[i] > max[i] do max[i] = v[i]
+		}
+	}
+	half_diagonal := (max - min) /2
+	offset_vec := (min + half_diagonal) * -1
+	offset_mat := UNIT_MAT4F
+	offset_mat[3][0] = offset_vec.x
+	offset_mat[3][1] = offset_vec.y
+	offset_mat[3][2] = offset_vec.z
+	return offset_mat
 }
