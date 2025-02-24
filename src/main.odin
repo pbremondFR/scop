@@ -15,6 +15,8 @@ import "core:math"
 
 // For tracking allocator (debug)
 import "core:mem"
+// Silence unused import warning when in release mode
+_ :: mem
 
 WINDOW_NAME :: "ft_scop"
 

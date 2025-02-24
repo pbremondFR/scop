@@ -2,6 +2,7 @@
 *.pdb
 *.log
 *.bin
-backpack*
 .vscode
 resources/big_models
+scop
+scop_debug
