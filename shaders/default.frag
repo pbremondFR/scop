@@ -66,17 +66,9 @@ vec3	get_normal()
 	// }
 	// else
 	if (length(Normal) == 0)
-		// return vec3(0, 1, 0);
 		return normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
 	else
 		return normalize(Normal);
-	// {
-	// 	vec3 normal = normalize(Normal);
-	// 	if (length(normal) == 0) // No vertex normal, calc face normal
-	// 		// normal = vec3(0, 1, 0);
-	// 		normal = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
-	// 	return normal;
-	// }
 }
 
 vec3	calc_ambient()
@@ -105,22 +97,51 @@ vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 	return diffuse;
 }
 
+// Phong reflection model
 vec3	calc_specular(vec3 norm, vec3 lightDir)
 {
 	vec3 spec_color = materials[MtlID].Ks;
 	float spec_exponent = materials[MtlID].Ns;
+
 	if (spec_exponent == 0)
 		return vec3(0.0);
+
 	if (texture_enabled(MAP_KS)) {
 		vec3 texture_color = texture(texture_Ks, Uv).rgb;
 		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
 	}
-	// XXX: Disable all scalar textures, can't be bothered
-	// if (texture_enabled(MAP_NS))
-	// 	spec_exponent *= length(texture(texture_Ns, Uv).xyz);
+
 	vec3 viewDir = normalize(view_pos - FragPos);
 	vec3 reflectDir = reflect(lightDir, norm);
-	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
+	float spec = pow(max(0, dot(viewDir, reflectDir)), 1000);
+
+	vec3 specular = spec * spec_color * light_color;
+
+	return specular;
+}
+
+// Blinn-Phong reflection model
+// https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model#Description
+vec3	calc_specular_blinn(vec3 norm, vec3 lightDir)
+{
+	vec3 spec_color = materials[MtlID].Ks;
+	// For Blinn-Phong to match Phong lighting, multiplying the exponent by 4 "will result
+	// in specular highlights that very closely match the corresponding Phong reflections"
+	// c.f. Wikipedia article
+	float spec_exponent = materials[MtlID].Ns * 4;
+
+	if (spec_exponent == 0)
+		return vec3(0.0);
+
+	if (texture_enabled(MAP_KS)) {
+		vec3 texture_color = texture(texture_Ks, Uv).rgb;
+		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
+	}
+
+	vec3 viewDir = normalize(view_pos - FragPos);
+	vec3 halfwayDir = normalize(lightDir + viewDir);
+	float spec = pow(max(dot(norm, halfwayDir), 0.0), spec_exponent);
+
 	vec3 specular = spec * spec_color * light_color;
 
 	return specular;
@@ -128,16 +149,17 @@ vec3	calc_specular(vec3 norm, vec3 lightDir)
 
 void main()
 {
-	// Calculate fragment's normal
 	vec3 normal = get_normal();
-	// Calculate light source's direction
 	vec3 lightDir = normalize(light_pos - FragPos);
 
 	vec3 ambient = calc_ambient();
 	vec3 diffuse = calc_diffuse(normal, lightDir);
-	vec3 specular = calc_specular(normal, lightDir);
+	// vec3 specular = calc_specular(normal, lightDir);
+
+	// HACK: Looks like something is fucked here, signs probably shouldn't be flipped like that
+	// It still works though
+	vec3 specular = calc_specular_blinn(-normal, -lightDir);
 
 	vec3 final_color = (ambient + diffuse + specular);
-	// FIXME: It looks like specular lighting does not work on Linux???
-	FragColor = vec4(ambient + diffuse + specular, 1.0);
+	FragColor = vec4(final_color, 1.0);
 }

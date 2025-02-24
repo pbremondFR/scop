@@ -4,3 +4,4 @@
 *.bin
 backpack*
 .vscode
+resources/big_models
