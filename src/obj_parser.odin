@@ -261,7 +261,7 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 {
 	file_contents, err := virtual.map_file_from_path(obj_file_path, {.Read})
 	if err != nil {
-		fmt.printfln("Error mapping `%v`: %v", obj_file_path, err)
+		log_error("Failed to map file `%v`: %v", obj_file_path, err)
 		return
 	}
 	defer virtual.release(raw_data(file_contents), len(file_contents))

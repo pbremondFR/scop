@@ -70,7 +70,7 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 	// obj_data and mtl_materials are allocated with scratch allocator
 	obj_data, mtl_materials, obj_ok := parse_obj_file(obj_file_path, context.temp_allocator)
 	if !obj_ok {
-		fmt.printfln("Failed to load `%v`", obj_file_path)
+		log_error("Failed to load %v", obj_file_path)
 		return
 	}
 
@@ -86,7 +86,7 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 	defer delete(wavefront_root_dir)
 	gl_textures, gl_materials, textures_ok := load_textures_from_wavefront_materials(mtl_materials, wavefront_root_dir)
 	if !textures_ok {
-		fmt.println("Error loading textures")
+		log_error("Failed to load textures")
 		return
 	}
 

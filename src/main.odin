@@ -166,7 +166,6 @@ main :: proc() {
 	// === LOAD MAIN MODEL ===
 	main_model, model_ok := load_model(os.args[1])
 	if !model_ok {
-		log_error("Failed to load model")
 		return
 	}
 	defer delete_FinalModel(&main_model)
