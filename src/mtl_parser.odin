@@ -4,6 +4,8 @@ import "core:fmt"
 import "core:strconv"
 import "core:mem/virtual"
 import "core:path/filepath"
+import "core:math/linalg"
+import "core:math"
 import "base:runtime"
 
 WavefrontMaterial :: struct {
@@ -39,6 +41,7 @@ get_default_material :: proc(name: string = DEFAULT_MATERIAL_NAME, loc := #calle
 		Kd = {0.5, 0.5, 0.5},
 		Ks = {0.5, 0.5, 0.5},
 		Ns = 39,
+		Ni = 0.001, // Ni should be clamped between 0.001 and 10.0
 	}
 }
 
@@ -105,14 +108,14 @@ parse_mtl_statement :: proc(split_line: []string, materials: ^map[string]Wavefro
 		case "Ks":
 			if !parse_vec3(split_line[1:], &active_material.Ks) do return .Failure
 		case "Ns":
-			active_material.Ns = strconv.parse_f32(split_line[1]) or_else -1
-			if active_material.Ns == -1 do return .Failure
+			active_material.Ns = strconv.parse_f32(split_line[1]) or_else math.nan_f32()
+			if math.is_nan(active_material.Ns) do return .Failure
 		case "Tr":
-			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else -1)
-			if active_material.d == -1 do return .Failure
+			active_material.d = 1.0 - (strconv.parse_f32(split_line[1]) or_else math.nan_f32())
+			if math.is_nan(active_material.d) do return .Failure
 		case "d":
-			active_material.d = strconv.parse_f32(split_line[1]) or_else -1
-			if active_material.d == -1 do return .Failure
+			active_material.d = strconv.parse_f32(split_line[1]) or_else math.nan_f32()
+			if math.is_nan(active_material.d) do return .Failure
 		case "map_Ka":
 			active_material.texture_paths[.Map_Ka] = strings.clone(split_line[1])
 		case "map_Kd":
@@ -183,6 +186,49 @@ parse_mtl_file :: proc(mtl_file_name: string, working_dir: string) \
 
 		}
 	}
-	ok = true
+	ok = check_materials_validity(materials)
 	return
+}
+
+@(private="file")
+check_materials_validity :: proc(materials: map[string]WavefrontMaterial) -> (ok: bool)
+{
+	is_vector_normalized :: proc(vec: Vec3f) -> bool {
+		return vec.x >= 0 && vec.y >= 0 && vec.z >= 0 && vec.x <= 1 && vec.y <= 1 && vec.z <= 1
+	}
+
+	has_error := false
+
+	for _, &material in materials {
+		// Check if all colors are normalized
+		colors_to_check := [?]^Vec3f{&material.Ka, &material.Kd, &material.Ks, &material.Tf}
+		color_names := [?]string{"Ka", "Kd", "Ks", "Tf"}
+		#assert(len(colors_to_check) == len(color_names))
+
+		for color, i in colors_to_check {
+			if !is_vector_normalized(color^) {
+				log_warning("material `%v': color %v is not normalized (%v)", material.name, color_names[i], color^)
+			}
+		}
+
+		// Specular exponent bounds check
+		if material.Ns < 0 {
+			log_error("material `%v': negative specular exponent", material.name)
+			has_error = true
+		} else if material.Ns > 1000 {
+			log_warning("material `%v': very high specular exponent", material.name)
+		}
+		// Dissolve/transparency bounds check
+		if material.d < 0.0 || material.d > 1.0 {
+			log_error("material `%v': dissolve is not normalized (%v)", material.name, material.d)
+			has_error = true
+		}
+		// Index of refraction bounds check
+		if material.Ni < 0.001 || material.Ni > 10.0 {
+			log_error("material `%v': out-of-bounds index of refraction: should be in range [0.001,10], is %v",
+				material.name, material.Ni)
+			has_error = true
+		}
+	}
+	return has_error == false
 }

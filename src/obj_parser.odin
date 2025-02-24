@@ -302,7 +302,8 @@ parse_obj_file :: proc(obj_file_path: string, temp_allocator: runtime.Allocator)
 				materials = parse_mtl_file(split_line[1], working_dir) or_return
 			case "usemtl":
 				if split_line[1] not_in materials {
-					log_warning("%v:%v: Material `%v' is not found in current materials", file_name, line_number, split_line[1])
+					log_warning("%v:%v: Material `%v' is not found in current materials. Default material used instead.",
+						file_name, line_number, split_line[1])
 					active_material_name = DEFAULT_MATERIAL_NAME
 				} else {
 					active_material_name = materials[split_line[1]].name
