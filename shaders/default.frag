@@ -108,11 +108,13 @@ vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 vec3	calc_specular(vec3 norm, vec3 lightDir)
 {
 	vec3 spec_color = materials[MtlID].Ks;
+	float spec_exponent = materials[MtlID].Ns;
+	if (spec_exponent == 0)
+		return vec3(0.0);
 	if (texture_enabled(MAP_KS)) {
 		vec3 texture_color = texture(texture_Ks, Uv).rgb;
 		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
 	}
-	float spec_exponent = materials[MtlID].Ns;
 	// XXX: Disable all scalar textures, can't be bothered
 	// if (texture_enabled(MAP_NS))
 	// 	spec_exponent *= length(texture(texture_Ns, Uv).xyz);
@@ -137,5 +139,5 @@ void main()
 
 	vec3 final_color = (ambient + diffuse + specular);
 	// FIXME: It looks like specular lighting does not work on Linux???
-	FragColor = vec4(ambient + diffuse, 1.0);
+	FragColor = vec4(ambient + diffuse + specular, 1.0);
 }
