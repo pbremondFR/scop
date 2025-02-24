@@ -15,7 +15,7 @@ import "core:math/linalg"
 import "core:math"
 import "core:path/filepath"
 
-// For tracking allocator below (leaks/double free debugging)
+// For tracking allocator (debug)
 import "core:mem"
 
 WINDOW_NAME :: "ft_scop"

@@ -60,59 +60,16 @@ get_i32le :: #force_inline proc "contextless" (data: []byte) -> i32 {
 }
 /* ================================================================ */
 
-/*
- * For bonuses and testing purposes, as I'm using Odin's standard library to be able to load PNGs
- * in addition to BMPs.
- */
-parse_any_texture_bonus :: proc(texture_path: string) -> (texture: BitmapTexture, ok: bool) {
-	img, load_err := image.load_from_file(texture_path)
-	// Only load missing texture if error was I/O related. The implementation returns that instead of
-	// propagating the io.Error, because read_entire_file returns a bool and not an enum.
-	if load_err == .Unable_To_Read_File {
-		fmt.printfln(WARNING_YELLOW_TEXT + " Failed to load texture `%v': %v", texture_path, load_err)
-		texture = get_missing_texture()
-		ok = true
-		return
-	}
-	else if load_err != nil {
-		// Other kind of errors make parsing stop, don't fallback on missing texture for this
-		fmt.printfln(ERROR_RED_TEXT + "Failed to load texture `%v': %v", texture_path, load_err)
-		return
-	}
-	defer image.destroy(img)
-
-	texture.data = make([]byte, len(img.pixels.buf))
-	image.alpha_drop_if_present(img)
-
-	num_pixels := len(img.pixels.buf) / 3
-	assert(num_pixels == img.width * img.height)
-
-	// FIXME: broken or something I don't remember
-
-	// Copy image by flipping it vertically, because that's what OpenGL expects
-	for i in 0..<img.height {
-		dest := mem.ptr_offset(raw_data(texture.data), img.width * 3 * (img.height - i))
-		src := mem.ptr_offset(raw_data(img.pixels.buf), img.width * 3 * i)
-		mem.copy_non_overlapping(dest, src, img.width * 3)
-	}
-
-	texture.width = i32(img.width)
-	texture.height = i32(img.height)
-	texture.bpp = 32
-	ok = true
-	return
-}
-
 parse_bmp_texture :: proc(texture_path: string) -> (texture: BitmapTexture, ok: bool) {
 	if !strings.ends_with(texture_path, ".bmp") && !strings.ends_with(texture_path, ".dib") {
-		fmt.printfln("`%v': Only Windows Bitmap files are allowed", texture_path)
+		log_error("`%v': Only Windows Bitmap files are allowed", texture_path)
 		return
 	}
 	file_contents, map_err := virtual.map_file_from_path(texture_path, {.Read})
 	// If file is not found, print a warning and load the default texture
 	if map_err != nil {
-		fmt.printfln(WARNING_YELLOW_TEXT + " Failed to open `%v`: %v", texture_path, map_err);
-		texture = get_missing_texture()
+		log_warning("Failed to open `%v`: %v. Using default texture.", texture_path, map_err);
+		texture = get_missing_texture() // Cannot fail
 		ok = true
 		return
 	}
@@ -245,12 +202,12 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 				continue
 			}
 			full_file_path := filepath.join({root_dir, mtl.texture_paths[texture_unit]}, context.temp_allocator)
-			bitmaps[mtl.texture_paths[texture_unit]] = BitmapTextureAndMaterialID{
-				// TODO: ONLY FOR BONUSES!!!!!
-				parse_bmp_texture(full_file_path) or_return,
-				// parse_any_texture_bonus(full_file_path) or_return,
-				0
+			texture, tex_ok := parse_bmp_texture(full_file_path)
+			if !tex_ok {
+				log_error("`%v': invalid texture file", full_file_path)
+				return
 			}
+			bitmaps[mtl.texture_paths[texture_unit]] = BitmapTextureAndMaterialID{texture, 0}
 		}
 	}
 
