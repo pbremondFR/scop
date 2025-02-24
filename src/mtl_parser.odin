@@ -4,9 +4,7 @@ import "core:fmt"
 import "core:strconv"
 import "core:mem/virtual"
 import "core:path/filepath"
-import "core:math/linalg"
 import "core:math"
-import "base:runtime"
 
 WavefrontMaterial :: struct {
 	name: string "Material name",

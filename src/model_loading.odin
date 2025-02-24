@@ -2,8 +2,6 @@ package main
 
 import gl "vendor:OpenGL"
 
-import "core:fmt"
-import "core:os"
 import "core:path/filepath"
 import "base:runtime"
 

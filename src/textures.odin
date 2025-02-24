@@ -190,7 +190,7 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 
 	// Open and load all bitmap textures present in materials list. If texture is already loaded, skip it.
 	// Each loaded texture is mapped with its name from the .mtl file.
-	for material_name, mtl in materials {
+	for _, mtl in materials {
 		for texture_unit in TextureUnit {
 			if len(mtl.texture_paths[texture_unit]) == 0 || mtl.texture_paths[texture_unit] in bitmaps {
 				continue

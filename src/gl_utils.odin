@@ -2,10 +2,7 @@ package main
 
 import "core:os"
 import "core:fmt"
-import "core:math"
-import "core:slice"
 import "core:strings"
-import "core:mem"
 import gl "vendor:OpenGL"
 import clang "core:c"
 

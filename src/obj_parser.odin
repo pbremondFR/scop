@@ -7,7 +7,6 @@ import "core:strings"
 import "core:fmt"
 import "core:strconv"
 import "core:path/filepath"
-import "core:encoding/ansi"
 import "core:slice"
 import "base:runtime"
 import clang "core:c"
@@ -342,7 +341,7 @@ consume_materials_map_to_array :: proc(materials_map: ^map[string]WavefrontMater
 	materials_array := make([]WavefrontMaterial, len(materials_map))
 
 	i :u32 = 0
-	for key, &material in materials_map {
+	for _, &material in materials_map {
 		materials_array[i] = material
 		i += 1
 	}
