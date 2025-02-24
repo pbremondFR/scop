@@ -417,7 +417,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	else if key == glfw.KEY_F && action == glfw.PRESS {
 		state.light_source_pos = -state.camera.pos
 	}
-	else if (key >= glfw.KEY_1 && key <= glfw.KEY_6) && action == glfw.PRESS {
+	else if (key >= glfw.KEY_1 && key <= glfw.KEY_4) && action == glfw.PRESS {
 		selected_shader := cast(ShaderProgram)(key - glfw.KEY_1)
 		fmt.println("Selecting shader", selected_shader)
 		state.shader_program = selected_shader
