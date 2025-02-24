@@ -1,35 +1,9 @@
-// GLFW and OpenGL example with very verbose comments and links to documentation for learning
-// By Soren Saket
-
-// semi-colons ; are not requied in odin
-//
-
-// Every Odin script belongs to a package
-// Define the package with the package [packageName] statement
-// The main package name is reserved for the program entry point package
-// You cannot have two different packages in the same directory
-// If you want to create another package create a new directory and name the package the same as the directory
-// You can then import the package with the import keyword
-// https://odin-lang.org/docs/overview/#packages
 package main
 
-// Import statement
-// https://odin-lang.org/docs/overview/#packages
-
-// Odin by default has two library collections. Core and Vendor
-// Core contains the default library all implemented in the Odin language
-// Vendor contains bindings for common useful packages aimed at game and software development
-// https://odin-lang.org/docs/overview/#import-statement
-
-// fmt contains formatted I/O procedures.
-// https://pkg.odin-lang.org/core/fmt/
 import "core:fmt"
-// C interoperation compatibility
 import "core:c"
 
-// Here we import OpenGL and rename it to gl for short
 import gl "vendor:OpenGL"
-// We use GLFW for cross platform window creation and input handling
 import "vendor:glfw"
 
 import "core:strings"
@@ -41,14 +15,12 @@ import "core:math/linalg"
 import "core:math"
 import "core:path/filepath"
 
-// You can set constants with ::
+// For tracking allocator below (leaks/double free debugging)
+import "core:mem"
+
 WINDOW_NAME :: "ft_scop"
 
-// GL_VERSION define the version of OpenGL to use. Here we use 4.6 which is the newest version
-// You might need to lower this to 3.3 depending on how old your graphics card is.
-// Constant with explicit type for example
-GL_MAJOR_VERSION : c.int : 4
-// Constant with type inference
+GL_MAJOR_VERSION :: 4
 GL_MINOR_VERSION :: 2
 
 PLAYER_TRANSLATE_SPEED	:f32 : 30
@@ -90,11 +62,9 @@ state := State{
 	texture_factor = 1.0,
 }
 
-// For tracking allocator below (leaks/double free debugging)
-import "core:mem"
-
 main :: proc() {
 
+	// Odin tracking allocator to detect leaks and double frees.
 	when ODIN_DEBUG {
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)
@@ -182,11 +152,7 @@ main :: proc() {
 
 	old_time, time: f64 = glfw.GetTime(), glfw.GetTime()
 
-	// There is only one kind of loop in Odin called for
-	// https://odin-lang.org/docs/overview/#for-statement
 	for (!glfw.WindowShouldClose(window)) {
-		// Process waiting events in queue
-		// https://www.glfw.org/docs/3.3/group__window.html#ga37bd57223967b4211d60ca1a0bf3c832
 		glfw.PollEvents()
 
 		// Calculate delta-time since last frame
@@ -482,53 +448,32 @@ size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
 }
 
 init_OpenGL :: proc() -> (window: glfw.WindowHandle, ok: bool) {
-	// GLFW_TRUE if successful, or GLFW_FALSE if an error occurred.
 	if(glfw.Init() != true){
-		fmt.println("Failed to initialize GLFW")
+		log_error("Failed to initialize GLFW")
 		return
 	}
-	// Set Window Hints
-	// https://www.glfw.org/docs/3.3/window_guide.html#window_hints
-	// https://www.glfw.org/docs/3.3/group__window.html#ga7d9c8c62384b1e2821c4dc48952d2033
 	glfw.WindowHint(glfw.RESIZABLE, 1)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR_VERSION)
 	glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR_VERSION)
 	glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-	// https://www.glfw.org/docs/3.1/group__init.html#gaaae48c0a18607ea4a4ba951d939f0901
 
-	// https://www.glfw.org/docs/3.3/group__window.html#ga3555a418df92ad53f917597fe2f64aeb
 	window = glfw.CreateWindow(state.window_size.x, state.window_size.y, WINDOW_NAME, nil, nil)
-	// https://www.glfw.org/docs/latest/group__window.html#gacdf43e51376051d2c091662e9fe3d7b2
 
-	// If the window pointer is invalid
 	if window == nil {
-		fmt.println("Unable to create window")
+		log_error("Failed to create window")
 		return
 	}
 
-	// https://www.glfw.org/docs/3.3/group__context.html#ga1c04dc242268f827290fe40aa1c91157
 	glfw.MakeContextCurrent(window)
 
 	// Enable vsync
-	// https://www.glfw.org/docs/3.3/group__context.html#ga6d4e0cdf151b5e579bd67f13202994ed
 	glfw.SwapInterval(1)
 
-	// This function sets the key callback of the specified window, which is called when a key is pressed, repeated or released.
-	// https://www.glfw.org/docs/3.3/group__input.html#ga1caf18159767e761185e49a3be019f8d
 	glfw.SetKeyCallback(window, key_callback)
 
-	// This function sets the framebuffer resize callback of the specified window, which is called when the framebuffer of the specified window is resized.
-	// https://www.glfw.org/docs/3.3/group__window.html#gab3fb7c3366577daef18c0023e2a8591f
 	glfw.SetFramebufferSizeCallback(window, size_callback)
 
-	// Set OpenGL Context bindings using the helper function
-	// See Odin Vendor source for specifc implementation details
-	// https://github.com/odin-lang/Odin/tree/master/vendor/OpenGL
-	// https://www.glfw.org/docs/3.3/group__context.html#ga35f1837e6f666781842483937612f163
-
-	// casting the c.int to int
-	// This is needed because the GL_MAJOR_VERSION has an explicit type of c.int
-	gl.load_up_to(int(GL_MAJOR_VERSION), GL_MINOR_VERSION, glfw.gl_set_proc_address)
+	gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
 	ok = true
 	return
 }
