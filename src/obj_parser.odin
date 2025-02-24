@@ -2,7 +2,6 @@
 
 package main
 
-import "core:os"
 import "core:mem/virtual"
 import "core:strings"
 import "core:fmt"

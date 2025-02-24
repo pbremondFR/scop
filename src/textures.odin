@@ -1,7 +1,5 @@
 package main
 
-import "core:os"
-import "core:fmt"
 import "core:mem"
 import "core:mem/virtual"
 import "core:encoding/endian"
@@ -9,10 +7,6 @@ import "core:strings"
 import "core:path/filepath"
 import "base:runtime"
 import gl "vendor:OpenGL"
-// TODO: Somehow conditionnaly import with feature flag, define, or something like that
-import "core:image/png"
-import "core:image/bmp"
-import "core:image"
 
 @(private="file")
 get_missing_texture :: proc() -> (texture: BitmapTexture) {

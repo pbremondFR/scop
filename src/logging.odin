@@ -1,6 +1,5 @@
 package main
 
-import "core:strings"
 import "core:fmt"
 import "core:encoding/ansi"
 

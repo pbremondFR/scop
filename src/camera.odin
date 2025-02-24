@@ -1,8 +1,5 @@
 package main
 
-import "core:math"
-import "core:math/linalg"
-
 PlayerCamera :: struct {
 	pos: Vec3f,
 	pitch: f32,

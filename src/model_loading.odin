@@ -2,7 +2,6 @@ package main
 
 import gl "vendor:OpenGL"
 
-import "core:strings"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"

@@ -1,7 +1,6 @@
 package main
 
 import "core:math"
-import "core:math/linalg"
 
 Mat4f :: matrix[4, 4]f32
 Mat3f :: matrix[3, 3]f32
