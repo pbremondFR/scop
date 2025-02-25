@@ -76,12 +76,13 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 	model_pos := get_model_offset_matrix(obj_data)
 
 	// === LOAD MODEL ===
-	gl_model := obj_data_to_gl_objects(&obj_data, mtl_materials)
-	if gl_model.vao == 0 || gl_model.vbo == 0 || gl_model.ebo == 0 {
-		log_error("Failed to load data to GPU")
+	gl_model, model_ok := obj_data_to_gl_objects(&obj_data, mtl_materials)
+	assert(gl_model.ebo_len % 3 == 0) // Model is properly "trianglized"
+	if !model_ok {
+		log_error("%v: Failed to send model to GPU", obj_file_path)
 		return
 	}
-	assert(gl_model.ebo_len % 3 == 0) // Model is properly "trianglized"
+	defer if !ok { delete_GlModel(&gl_model) } // Free resource if exit with error
 
 	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL ===
 	wavefront_root_dir := filepath.dir(obj_file_path)
@@ -94,7 +95,10 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
-	assert(ubo != 0)
+	if ubo == 0 {
+		log_error("%v: Failed to send materials to GPU")
+		return
+	}
 
 	return FinalModel{gl_model, model_pos, gl_materials, ubo, gl_textures}, true
 }

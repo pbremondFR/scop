@@ -294,7 +294,7 @@ delete_GlModel :: proc(model: ^GlModel)
  * Each index range corresponds to a group of vertices belonging to the same material.
  * Segregating by material opens the door for rendering techniques like order-independant dissolve.
  */
-obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel)
+obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel, ok: bool)
 {
 	buffers := obj_data_to_vertex_buffer(obj_data, materials)
 	defer {
@@ -350,6 +350,7 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[strin
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
 
+	ok = (gl_model.vao != 0 && gl_model.vbo != 0 && gl_model.ebo != 0)
 	return
 }
 

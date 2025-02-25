@@ -171,6 +171,7 @@ GlMaterial :: struct {
 /*
  * Take as input list of wavefront materials, load all of the required textures in the GPU VRAM,
  * and return a new map of materials, which describe a material in OpenGL instead of Wavefront format.
+ * When this function returns !ok, no memory needs to be freed/deleted.
  */
 load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMaterial, root_dir: string) \
 	-> (gl_textures: []GlTextureID, gl_materials: map[string]GlMaterial, ok: bool)
