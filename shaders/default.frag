@@ -12,7 +12,7 @@ struct MaterialProperties{
 };
 
 layout(std140, binding = 0) uniform uMaterials{
-	MaterialProperties	materials[128];
+	MaterialProperties	materials[256];
 };
 
 uniform vec3 light_pos;
@@ -42,46 +42,47 @@ uniform sampler2D texture_bump;
 uniform sampler2D texture_disp;
 uniform sampler2D texture_decal;
 
-in vec4 Pos;
-in vec2 Uv;
-flat in uint MtlID;
-in vec3 Normal;
-in vec3 FragPos;
-in mat3 TBN;
+in VS_OUT {
+	vec3		pos;
+	vec3		world_pos;
+	vec2		uv;
+	flat uint	mtl_id;
+	mat3		TBN;
+}	vs_in;
 
 out vec4 FragColor;
 
 bool texture_enabled(uint texture_unit)
 {
-	return (materials[MtlID].enabled_textures & (1 << texture_unit)) != 0;
+	return (materials[vs_in.mtl_id].enabled_textures & (1 << texture_unit)) != 0;
 }
 
 vec3	get_normal()
 {
 	if (texture_enabled(MAP_BUMP))
 	{
-		vec3 normal = texture(texture_bump, Uv).rgb;
+		vec3 normal = texture(texture_bump, vs_in.uv).rgb;
 		normal = normal * 2.0 - 1.0;	// transform normal vector to range [-1,1]
-		normal = normalize(TBN * normal);
+		normal = normalize(vs_in.TBN * normal);
 		// FIXME: vector sometimes becomes NaN after TBN multiplication
-		// if (isnan(length(normal)))
-		// 	normal = normalize(Normal);
+		if (isnan(length(normal)))
+			normal = normalize(vs_in.TBN[2]);
 		return normal;
 	}
 	else
 	{
-		if (length(Normal) == 0)
-			return normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+		if (length(vs_in.TBN[2]) == 0)
+			return normalize(cross(dFdx(vs_in.world_pos.xyz), dFdy(vs_in.world_pos.xyz)));
 		else
-			return normalize(Normal);
+			return normalize(vs_in.TBN[2]);
 	}
 }
 
 vec3	calc_ambient()
 {
-	vec3 ambient_color = materials[MtlID].Ka;
+	vec3 ambient_color = materials[vs_in.mtl_id].Ka;
 	if (texture_enabled(MAP_KA)) {
-		vec3 texture_color = texture(texture_Ka, Uv).rgb;
+		vec3 texture_color = texture(texture_Ka, vs_in.uv).rgb;
 		ambient_color = mix(ambient_color, ambient_color * texture_color, texture_factor);
 	}
 	vec3 ambient_lighting = vec3(0.2, 0.2, 0.2);
@@ -92,9 +93,9 @@ vec3	calc_ambient()
 
 vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 {
-	vec3 diffuse_color = materials[MtlID].Kd;
+	vec3 diffuse_color = materials[vs_in.mtl_id].Kd;
 	if (texture_enabled(MAP_KD)) {
-		vec3 texture_color = texture(texture_Kd, Uv).rgb;
+		vec3 texture_color = texture(texture_Kd, vs_in.uv).rgb;
 		diffuse_color = mix(diffuse_color, diffuse_color * texture_color, texture_factor);
 	}
 	float diff = max(dot(norm, lightDir), 0.0);
@@ -106,18 +107,18 @@ vec3	calc_diffuse(vec3 norm, vec3 lightDir)
 // Phong reflection model
 vec3	calc_specular(vec3 norm, vec3 lightDir)
 {
-	vec3 spec_color = materials[MtlID].Ks;
-	float spec_exponent = materials[MtlID].Ns;
+	vec3 spec_color = materials[vs_in.mtl_id].Ks;
+	float spec_exponent = materials[vs_in.mtl_id].Ns;
 
 	if (spec_exponent == 0)
 		return vec3(0.0);
 
 	if (texture_enabled(MAP_KS)) {
-		vec3 texture_color = texture(texture_Ks, Uv).rgb;
+		vec3 texture_color = texture(texture_Ks, vs_in.uv).rgb;
 		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
 	}
 
-	vec3 viewDir = normalize(view_pos - FragPos);
+	vec3 viewDir = normalize(view_pos - vs_in.world_pos);
 	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), 1000);
 
@@ -130,21 +131,21 @@ vec3	calc_specular(vec3 norm, vec3 lightDir)
 // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model#Description
 vec3	calc_specular_blinn(vec3 norm, vec3 lightDir)
 {
-	vec3 spec_color = materials[MtlID].Ks;
+	vec3 spec_color = materials[vs_in.mtl_id].Ks;
 	// For Blinn-Phong to match Phong lighting, multiplying the exponent by 4 "will result
 	// in specular highlights that very closely match the corresponding Phong reflections"
 	// c.f. Wikipedia article
-	float spec_exponent = materials[MtlID].Ns * 4;
+	float spec_exponent = materials[vs_in.mtl_id].Ns * 4;
 
 	if (spec_exponent == 0)
 		return vec3(0.0);
 
 	if (texture_enabled(MAP_KS)) {
-		vec3 texture_color = texture(texture_Ks, Uv).rgb;
+		vec3 texture_color = texture(texture_Ks, vs_in.uv).rgb;
 		spec_color = mix(spec_color, spec_color * texture_color, texture_factor);
 	}
 
-	vec3 viewDir = normalize(view_pos - FragPos);
+	vec3 viewDir = normalize(view_pos - vs_in.world_pos);
 	vec3 halfwayDir = normalize(lightDir + viewDir);
 	float spec = pow(max(dot(norm, halfwayDir), 0.0), spec_exponent);
 
@@ -156,7 +157,7 @@ vec3	calc_specular_blinn(vec3 norm, vec3 lightDir)
 void main()
 {
 	vec3 normal = get_normal();
-	vec3 lightDir = normalize(light_pos - FragPos);
+	vec3 lightDir = normalize(light_pos - vs_in.world_pos);
 
 	vec3 ambient = calc_ambient();
 	vec3 diffuse = calc_diffuse(normal, lightDir);

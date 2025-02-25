@@ -20,11 +20,13 @@ uniform vec3 light_color;
 uniform vec3 view_pos;
 uniform sampler2D ourTexture;
 
-in vec4 Pos;
-in vec2 Uv;
-flat in uint MtlID;
-in vec3 Normal;
-in vec3 FragPos;
+in VS_OUT {
+	vec3		pos;
+	vec3		world_pos;
+	vec2		uv;
+	flat uint	mtl_id;
+	mat3		TBN;
+}	vs_in;
 
 out vec4 FragColor;
 
@@ -35,34 +37,34 @@ out vec4 FragColor;
 void main()
 {
 	// Ambient lighting
-	vec3 ambient_color = materials[MtlID].Ka;
+	vec3 ambient_color = materials[vs_in.mtl_id].Ka;
 	vec3 ambient = ambient_color * vec3(0.2, 0.2, 0.2);
 
 	// Diffuse lighting
-	vec3 diffuse_color = materials[MtlID].Kd;
-	vec3 norm = normalize(Normal);
+	vec3 diffuse_color = materials[vs_in.mtl_id].Kd;
+	vec3 norm = normalize(vs_in.TBN[2]);
 	if (length(norm) == 0) {
-		norm = normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+		norm = normalize(cross(dFdx(vs_in.world_pos.xyz), dFdy(vs_in.world_pos.xyz)));
 	}
-	vec3 lightDir = normalize(light_pos - FragPos);
+	vec3 lightDir = normalize(light_pos - vs_in.world_pos);
 	float diff = max(dot(norm, lightDir), 0.0);
 	vec3 diffuse = diff * diffuse_color * light_color;
 
 	// Specular lighting
-	vec3 spec_color = materials[MtlID].Ks;
-	float spec_exponent = materials[MtlID].Ns;
-	vec3 viewDir = normalize(view_pos - FragPos);
+	vec3 spec_color = materials[vs_in.mtl_id].Ks;
+	float spec_exponent = materials[vs_in.mtl_id].Ns;
+	vec3 viewDir = normalize(view_pos - vs_in.world_pos);
 	vec3 reflectDir = reflect(lightDir, norm);
 	float spec = pow(max(0, dot(viewDir, reflectDir)), spec_exponent);
 	vec3 specular = spec * spec_color * light_color;
 	if (spec_exponent == 0)
 		specular = vec3(0);
 
-	vec4 texture_color = texture(ourTexture, Uv);
+	vec4 texture_color = texture(ourTexture, vs_in.uv);
 
 	vec3 final_color3 = (ambient + diffuse + specular);// * texture_color.rgb;
 
-	vec4 color = vec4(final_color3, materials[MtlID].d);
+	vec4 color = vec4(final_color3, materials[vs_in.mtl_id].d);
 	// float z = 100;
 	// float weight =
 	// 	max(

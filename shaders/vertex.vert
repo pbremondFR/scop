@@ -10,29 +10,39 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-out vec4 Pos;
-out vec2 Uv;
-flat out uint MtlID;
-out vec3 Normal;
-out vec3 FragPos;
-out mat3 TBN;
+out VS_OUT {
+	vec3		pos;
+	vec3		world_pos;
+	vec2		uv;
+	flat uint	mtl_id;
+	mat3		TBN;
+}	vs_out;
 
 void main()
 {
-	FragPos = vec3(model * vec4(aPos, 1.0));
+	// FragPos = vec3(model * vec4(aPos, 1.0));
 
-	Pos = vec4(aPos, 1.0);
-	Uv = aUv;
-	MtlID = aMaterial;
-	Normal = aNormal;
-	// Calculate the normal matrix
-	// TODO: Transfer this to the CPU and pass it through a uniform
-	// Normal = mat3(transpose(inverse(model))) * aNormal;
-	Normal = normalize(vec3(model * vec4(aNormal, 0.0)));
-	vec3 tangent = normalize(vec3(model * vec4(aTangent, 0.0)));
-	vec3 bitangent = normalize(vec3(model * vec4(aBitangent, 0.0)));
-	TBN = mat3(tangent, bitangent, Normal);
+	// Pos = vec4(aPos, 1.0);
+	// Uv = aUv;
+	// MtlID = aMaterial;
+	// Normal = aNormal;
+	// // Calculate the normal matrix
+	// // TODO: Transfer this to the CPU and pass it through a uniform
+	// // Normal = mat3(transpose(inverse(model))) * aNormal;
+	// Normal = normalize(vec3(model * vec4(aNormal, 0.0)));
+	// vec3 tangent = normalize(vec3(model * vec4(aTangent, 0.0)));
+	// vec3 bitangent = normalize(vec3(model * vec4(aBitangent, 0.0)));
+	// TBN = mat3(tangent, bitangent, Normal);
 
-	gl_Position = projection * view * vec4(FragPos, 1.0);
+	vec3 T = normalize(vec3(model * vec4(aTangent, 0.0)));
+	vec3 B = normalize(vec3(model * vec4(aBitangent, 0.0)));
+	vec3 N = normalize(vec3(model * vec4(aNormal, 0.0)));
 
+	vs_out.pos = aPos;
+	vs_out.world_pos = vec3(model * vec4(aPos, 1.0));
+	vs_out.uv = aUv;
+	vs_out.mtl_id = aMaterial;
+	vs_out.TBN = mat3(T, B, N);
+
+	gl_Position = projection * view * vec4(vs_out.world_pos, 1.0);
 }

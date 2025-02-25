@@ -195,6 +195,13 @@ check_materials_validity :: proc(materials: map[string]WavefrontMaterial) -> (ok
 		return vec.x >= 0 && vec.y >= 0 && vec.z >= 0 && vec.x <= 1 && vec.y <= 1 && vec.z <= 1
 	}
 
+	MAX_MATERIALS_NUM :: 256
+	if len(materials) > MAX_MATERIALS_NUM {
+		log_error("Too many materials! Limit is %v but there are %v materials defined",
+			MAX_MATERIALS_NUM, len(materials))
+		return
+	}
+
 	has_error := false
 
 	for _, &material in materials {
