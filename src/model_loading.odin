@@ -77,7 +77,11 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 
 	// === LOAD MODEL ===
 	gl_model := obj_data_to_gl_objects(&obj_data, mtl_materials)
-	assert(gl_model.vao != 0 && gl_model.vbo != 0 && gl_model.ebo != 0)
+	if gl_model.vao == 0 || gl_model.vbo == 0 || gl_model.ebo == 0 {
+		log_error("Failed to load data to GPU")
+		return
+	}
+	assert(gl_model.ebo_len % 3 == 0) // Model is properly "trianglized"
 
 	// === LOAD TEXTURES, CONVERT MATERIALS FROM WAVEFRONT TO OPENGL ===
 	wavefront_root_dir := filepath.dir(obj_file_path)

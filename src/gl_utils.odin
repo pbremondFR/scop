@@ -135,10 +135,12 @@ get_shader_program_vert_frag_geom :: proc(vert_shader_path, frag_shader_path, ge
 }
 
 VertexData :: struct #packed {
-	pos: Vec3f "pos",
-	uv: Vec2f "uv",
-	material_idx: u32 "Material index",
-	norm: Vec3f "norm",
+	pos: Vec3f,
+	uv: Vec2f,
+	material_idx: u32,
+	norm: Vec3f,
+	tangent: Vec3f,
+	bitangent: Vec3f,
 }
 
 @(private="file")
@@ -292,7 +294,8 @@ delete_GlModel :: proc(model: ^GlModel)
  * Each index range corresponds to a group of vertices belonging to the same material.
  * Segregating by material opens the door for rendering techniques like order-independant dissolve.
  */
-obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel) {
+obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[string]WavefrontMaterial) -> (gl_model: GlModel)
+{
 	buffers := obj_data_to_vertex_buffer(obj_data, materials)
 	defer {
 		// Once those are sent to the GPU memory, we can release them from CPU RAM
@@ -307,6 +310,8 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[strin
 	gl_model.vbo_len = i32(len(buffers.vertex_buffer))
 	gl_model.ebo_len = i32(len(buffers.index_buffer))
 	gl_model.index_ranges = buffers.index_ranges
+
+	calculate_tangent_bitangent(&buffers)
 
 	// Generate buffers for VAO, VBO and EBO
 	gl.GenVertexArrays(1, &gl_model.vao)
@@ -326,11 +331,15 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[strin
 	gl.EnableVertexAttribArray(1)
 	gl.EnableVertexAttribArray(2)
 	gl.EnableVertexAttribArray(3)
+	gl.EnableVertexAttribArray(4)
+	gl.EnableVertexAttribArray(5)
 
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), 0)
 	gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, uv))
 	gl.VertexAttribIPointer(2, 1, gl.UNSIGNED_INT, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, material_idx))
 	gl.VertexAttribPointer(3, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, norm))
+	gl.VertexAttribPointer(4, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, tangent))
+	gl.VertexAttribPointer(5, 3, gl.FLOAT, gl.FALSE, size_of(buffers.vertex_buffer[0]), offset_of(VertexData, bitangent))
 
 	// Bind VAO to EBO and fill it with needed indices
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl_model.ebo)
@@ -342,6 +351,49 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[strin
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0)
 
 	return
+}
+
+import "core:math/linalg"
+
+@(private="file")
+calculate_tangent_bitangent :: proc(buffers: ^ModelVerticesAndIndexes)
+{
+	assert(len(buffers.index_buffer) % 3 == 0)
+	for i := 0; i < len(buffers.index_buffer); i += 3 {
+		// These 3 vertices form a triangle
+		v1 := &buffers.vertex_buffer[buffers.index_buffer[i]]
+		v2 := &buffers.vertex_buffer[buffers.index_buffer[i + 1]]
+		v3 := &buffers.vertex_buffer[buffers.index_buffer[i + 2]]
+
+		edge1 := v2.pos - v1.pos
+		edge2 := v3.pos - v1.pos
+		delta_uv1 := v2.uv - v1.uv
+		delta_uv2 := v3.uv - v1.uv
+
+		f := 1.0 / (delta_uv1.x * delta_uv2.y - delta_uv2.x * delta_uv1.y)
+
+		// tangent, bitangent : Vec3f
+
+		// tangent.x = f * (delta_uv2.y * edge1.x - delta_uv1.y * edge2.x);
+		// tangent.y = f * (delta_uv2.y * edge1.y - delta_uv1.y * edge2.y);
+		// tangent.z = f * (delta_uv2.y * edge1.z - delta_uv1.y * edge2.z);
+
+		// bitangent.x = f * (-delta_uv2.x * edge1.x + delta_uv1.x * edge2.x);
+		// bitangent.y = f * (-delta_uv2.x * edge1.y + delta_uv1.x * edge2.y);
+		// bitangent.z = f * (-delta_uv2.x * edge1.z + delta_uv1.x * edge2.z);
+
+		tangent := f * ((delta_uv2.y * edge1) - (delta_uv1.y * edge2))
+		bitangent := f * ((-delta_uv2.x * edge1) + (delta_uv1.x * edge2))
+		tangent = linalg.normalize(tangent)
+		bitangent = linalg.normalize(bitangent)
+
+		v1.tangent = tangent
+		v2.tangent = tangent
+		v3.tangent = tangent
+		v1.bitangent = bitangent
+		v2.bitangent = bitangent
+		v3.bitangent = bitangent
+	}
 }
 
 // XXX: Had to reorder members to get rid of padding & be compliant with GLSL std140 layout

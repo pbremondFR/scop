@@ -47,6 +47,7 @@ in vec2 Uv;
 flat in uint MtlID;
 in vec3 Normal;
 in vec3 FragPos;
+in mat3 TBN;
 
 out vec4 FragColor;
 
@@ -57,18 +58,23 @@ bool texture_enabled(uint texture_unit)
 
 vec3	get_normal()
 {
-	// if (texture_enabled(MAP_BUMP))
-	// {
-	// 	vec3 normal = texture(texture_bump, Uv).rgb;
-	// 	// transform normal vector to range [-1,1]
-	// 	normal = normalize(normal * 2.0 - 1.0);
-	// 	return normal;
-	// }
-	// else
-	if (length(Normal) == 0)
-		return normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+	if (texture_enabled(MAP_BUMP))
+	{
+		vec3 normal = texture(texture_bump, Uv).rgb;
+		normal = normal * 2.0 - 1.0;	// transform normal vector to range [-1,1]
+		normal = normalize(TBN * normal);
+		// FIXME: vector sometimes becomes NaN after TBN multiplication
+		// if (isnan(length(normal)))
+		// 	normal = normalize(Normal);
+		return normal;
+	}
 	else
-		return normalize(Normal);
+	{
+		if (length(Normal) == 0)
+			return normalize(cross(dFdx(FragPos.xyz), dFdy(FragPos.xyz)));
+		else
+			return normalize(Normal);
+	}
 }
 
 vec3	calc_ambient()
@@ -161,5 +167,8 @@ void main()
 	vec3 specular = calc_specular_blinn(-normal, -lightDir);
 
 	vec3 final_color = (ambient + diffuse + specular);
+	// XXX: DEBUG
+	if (isnan(length(normal)))
+		final_color = vec3(1, 0, 0);
 	FragColor = vec4(final_color, 1.0);
 }

@@ -13,7 +13,7 @@ map_Ka Rafale-airframe_baseColor.bmp
 map_Kd Rafale-airframe_baseColor.bmp
 # map_Ns Rafale-airframe_metallicRoughness.png
 # refl Rafale-airframe_metallicRoughness.png
-# bump Rafale-airframe_normal.png
+bump Rafale-airframe_normal.bmp
 
 newmtl mat1
 Ns 1000
