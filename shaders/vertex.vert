@@ -20,23 +20,13 @@ out VS_OUT {
 
 void main()
 {
-	// FragPos = vec3(model * vec4(aPos, 1.0));
-
-	// Pos = vec4(aPos, 1.0);
-	// Uv = aUv;
-	// MtlID = aMaterial;
-	// Normal = aNormal;
-	// // Calculate the normal matrix
-	// // TODO: Transfer this to the CPU and pass it through a uniform
-	// // Normal = mat3(transpose(inverse(model))) * aNormal;
-	// Normal = normalize(vec3(model * vec4(aNormal, 0.0)));
-	// vec3 tangent = normalize(vec3(model * vec4(aTangent, 0.0)));
-	// vec3 bitangent = normalize(vec3(model * vec4(aBitangent, 0.0)));
-	// TBN = mat3(tangent, bitangent, Normal);
-
 	vec3 T = normalize(vec3(model * vec4(aTangent, 0.0)));
 	vec3 B = normalize(vec3(model * vec4(aBitangent, 0.0)));
-	vec3 N = normalize(vec3(model * vec4(aNormal, 0.0)));
+	vec3 N;
+	if (length(aNormal) != 0)
+		N = normalize(vec3(model * vec4(aNormal, 0.0)));
+	else
+		N = vec3(0);
 
 	vs_out.pos = aPos;
 	vs_out.world_pos = vec3(model * vec4(aPos, 1.0));

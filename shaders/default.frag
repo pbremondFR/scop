@@ -169,7 +169,7 @@ void main()
 
 	vec3 final_color = (ambient + diffuse + specular);
 	// XXX: DEBUG
-	if (isnan(length(normal)))
-		final_color = vec3(1, 0, 0);
+	// if (isnan(length(normal)))
+	// 	final_color = vec3(1, 0, 0);
 	FragColor = vec4(final_color, 1.0);
 }
