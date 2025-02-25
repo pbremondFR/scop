@@ -14,6 +14,7 @@ process_player_movements :: proc() {
 	fov_delta: f32 = 0
 
 	PITCH_LIMIT :: 1.55334
+	FOV_LIMIT :: [2]f32{0.349066, 1.74533}
 
 	if state.glfw_inputs[glfw.KEY_W]			do movement.z += 1
 	if state.glfw_inputs[glfw.KEY_S]			do movement.z -= 1
@@ -55,6 +56,7 @@ process_player_movements :: proc() {
 	// Apply camera matrix transformation
 	state.camera.mat = get_camera_matrix(state.camera.pos, state.camera.pitch, state.camera.yaw)
 	state.fov += fov_delta * f32(state.dt) * PLAYER_FOV_SPEED
+	state.fov = math.clamp(state.fov, FOV_LIMIT[0], FOV_LIMIT[1])
 }
 
 
