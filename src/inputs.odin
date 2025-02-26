@@ -96,7 +96,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	else if key == glfw.KEY_N && action == glfw.PRESS {
 		state.enable_normals_view = !state.enable_normals_view
 	}
-	else if (key == glfw.KEY_COMMA || key == glfw.KEY_PERIOD) {
+	else if (key == glfw.KEY_COMMA || key == glfw.KEY_PERIOD) && action != glfw.RELEASE {
 		STEP :: 0.25
 		delta :f32 = -STEP if key == glfw.KEY_COMMA else STEP;
 		state.normals_view_length = math.max(state.normals_view_length + delta, 0 + STEP)
