@@ -208,7 +208,9 @@ load_textures_from_wavefront_materials :: proc(materials: map[string]WavefrontMa
 
 	// Generate OpenGL textures identifiers
 	gl_textures = make([]GlTextureID, len(bitmaps))
-	gl.GenTextures(i32(len(gl_textures)), cast([^]u32)raw_data(gl_textures))
+	gl.GenTextures(i32(len(gl_textures)), auto_cast raw_data(gl_textures))
+	// Alternative (manual) cast. Not sure I like auto_cast very much?
+	// gl.GenTextures(i32(len(gl_textures)), cast([^]u32)raw_data(gl_textures))
 
 	// Load each texture into the GPU VRAM
 	i :u32 = 0
