@@ -1,0 +1,6 @@
+newmtl cube
+	Ns 10.0000
+	Kd 0.5880 0.5880 0.5880
+	map_Ka uvchecker.bmp
+	map_Kd uvchecker.bmp
+	bump test_bump.bmp
