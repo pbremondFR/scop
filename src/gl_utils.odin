@@ -3,6 +3,7 @@ package main
 import "core:os"
 import "core:fmt"
 import "core:strings"
+import "core:math/linalg"
 import gl "vendor:OpenGL"
 import clang "core:c"
 
@@ -353,8 +354,6 @@ obj_data_to_gl_objects :: proc(obj_data: ^WavefrontObjData, materials: map[strin
 	ok = (gl_model.vao != 0 && gl_model.vbo != 0 && gl_model.ebo != 0)
 	return
 }
-
-import "core:math/linalg"
 
 @(private="file")
 calculate_tangent_bitangent :: proc(buffers: ^ModelVerticesAndIndexes)

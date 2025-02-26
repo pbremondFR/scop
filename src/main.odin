@@ -110,8 +110,8 @@ main :: proc() {
 	defer { for id in shader_programs do gl.DeleteProgram(id) }
 
 	// === LOAD LIGHT CUBE ===
-	light_vao, light_vbo := create_light_source()
-	assert(light_vao != 0 && light_vbo != 0)
+	light_vao, light_vbo, light_ok := create_light_cube()
+	if !light_ok do return
 	defer {
 		gl.DeleteVertexArrays(1, &light_vao)
 		gl.DeleteBuffers(1, &light_vbo)
@@ -188,21 +188,18 @@ main :: proc() {
 
 		gl.BindVertexArray(main_model.gl_model.vao)
 
-		// TODO: Measure performance impact of these two methods
 		// OLD WAY: DRAW EVERYTHING
 		// gl.DrawElements(gl.TRIANGLES, main_model.gl_model.ebo_len, gl.UNSIGNED_INT, nil)
 
-		// NEW WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
+		// NEW WIP WAY: DRAW EACH MATERIAL SEPARATELY (will be useful for transparency)
+		// Is also used so that different materials with different textures can be used
 		for range in main_model.gl_model.index_ranges {
-			for _, &material in main_model.gl_materials {
-				if material.index == range.material_index {
-					for unit in TextureUnit {
-						if material.textures[unit] == 0 {
-							continue
-						}
-						gl.ActiveTexture(gl.TEXTURE0 + u32(unit))
-						gl.BindTexture(gl.TEXTURE_2D, u32(material.textures[unit]))
-					}
+			material :^GlMaterial = main_model.gl_materials_by_index[range.material_index]
+			// Activate & bind relevant texture units for this material
+			for unit in TextureUnit {
+				if material.textures[unit] != 0 {
+					gl.ActiveTexture(gl.TEXTURE0 + u32(unit))
+					gl.BindTexture(gl.TEXTURE_2D, u32(material.textures[unit]))
 				}
 			}
 			gl.DrawElements(gl.TRIANGLES, range.length, gl.UNSIGNED_INT, rawptr(range.begin * size_of(u32)))
@@ -217,27 +214,11 @@ main :: proc() {
 		}
 
 		// === DRAW LIGHT CUBE ===
-		gl.UseProgram(shader_programs[.LightSource])
-
-		cube_model_matrix := get_light_cube_model_matrix(state.light_source_pos, f32(time))
-		set_shader_uniform(shader_programs[.LightSource], "light_pos", &state.light_source_pos)
-		set_shader_uniform(shader_programs[.LightSource], "light_color", &Vec3f{1, 1, 1})
-		set_shader_uniform(shader_programs[.LightSource], "model", &cube_model_matrix)
-		set_shader_uniform(shader_programs[.LightSource], "view", &state.camera.mat)
-		set_shader_uniform(shader_programs[.LightSource], "projection", &proj_matrix)
-
-		gl.BindVertexArray(light_vao)
-		gl.DrawArrays(gl.TRIANGLES, 0, 36)
+		draw_light_cube(light_vao, shader_programs[.LightSource], &proj_matrix, f32(time))
 
 		glfw.SwapBuffers(window)
 	}
 
-}
-
-get_light_cube_model_matrix :: proc(cube_position: Vec3f, time: f32) -> (cube_model_matrix: Mat4f) {
-	cube_model_matrix = UNIT_MAT4F
-	cube_model_matrix[3].xyz = cube_position
-	return cube_model_matrix * get_rotation_matrix4_x_axis(time) * get_rotation_matrix4_y_axis(time)
 }
 
 size_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
@@ -273,69 +254,5 @@ init_OpenGL :: proc() -> (window: glfw.WindowHandle, ok: bool) {
 
 	gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
 	ok = true
-	return
-}
-
-
-create_light_source :: proc() -> (light_vao, light_vbo: u32) {
-	cube_vertices := [?]f32{
-		// Back face
-		-0.5, -0.5, -0.5, // Bottom-left
-		0.5, -0.5, -0.5, // bottom-right
-		0.5,  0.5, -0.5, // top-right
-		0.5,  0.5, -0.5, // top-right
-		-0.5,  0.5, -0.5, // top-left
-		-0.5, -0.5, -0.5, // bottom-left
-		// Front face
-		-0.5, -0.5,  0.5, // bottom-left
-		0.5,  0.5,  0.5, // top-right
-		0.5, -0.5,  0.5, // bottom-right
-		0.5,  0.5,  0.5, // top-right
-		-0.5, -0.5,  0.5, // bottom-left
-		-0.5,  0.5,  0.5, // top-left
-		// Left face
-		-0.5,  0.5,  0.5, // top-right
-		-0.5, -0.5, -0.5, // bottom-left
-		-0.5,  0.5, -0.5, // top-left
-		-0.5, -0.5, -0.5, // bottom-left
-		-0.5,  0.5,  0.5, // top-right
-		-0.5, -0.5,  0.5, // bottom-right
-		// Right face
-		0.5,  0.5,  0.5, // top-left
-		0.5,  0.5, -0.5, // top-right
-		0.5, -0.5, -0.5, // bottom-right
-		0.5, -0.5, -0.5, // bottom-right
-		0.5, -0.5,  0.5, // bottom-left
-		0.5,  0.5,  0.5, // top-left
-		// Bottom face
-		-0.5, -0.5, -0.5, // top-right
-		0.5, -0.5,  0.5, // bottom-left
-		0.5, -0.5, -0.5, // top-left
-		0.5, -0.5,  0.5, // bottom-left
-		-0.5, -0.5, -0.5, // top-right
-		-0.5, -0.5,  0.5, // bottom-right
-		// Top face
-		-0.5,  0.5, -0.5, // top-left
-		0.5,  0.5, -0.5, // top-right
-		0.5,  0.5,  0.5, // bottom-right
-		0.5,  0.5,  0.5, // bottom-right
-		-0.5,  0.5,  0.5, // bottom-left
-		-0.5,  0.5, -0.5  // top-left
-	}
-
-	// TODO: Error checking?
-	gl.GenBuffers(1, &light_vbo)
-	gl.BindBuffer(gl.ARRAY_BUFFER, light_vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(cube_vertices) * size_of(cube_vertices[0]),
-		raw_data(cube_vertices[:]), gl.STATIC_DRAW)
-
-	gl.GenVertexArrays(1, &light_vao)
-	gl.BindVertexArray(light_vao)
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * size_of(f32), 0)
-	gl.EnableVertexAttribArray(0)
-
-	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
-	gl.BindVertexArray(0)
-
 	return
 }

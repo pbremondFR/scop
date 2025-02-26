@@ -44,6 +44,7 @@ FinalModel :: struct {
 	gl_model: GlModel,
 	wPosition: Mat4f,
 	gl_materials: map[string]GlMaterial,
+	gl_materials_by_index: []^GlMaterial,
 	materials_ubo: u32,
 	gl_textures: []GlTextureID,
 }
@@ -54,6 +55,7 @@ delete_FinalModel :: proc(model: ^FinalModel)
 
 	for _, &material in model.gl_materials do delete(material.name)
 	delete(model.gl_materials)
+	delete(model.gl_materials_by_index)
 
 	gl.DeleteBuffers(1, &model.materials_ubo)
 
@@ -92,6 +94,7 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 		log_error("Failed to load textures")
 		return
 	}
+	gl_materials_by_index := get_materials_by_index(&gl_materials)
 
 	// === MATERIALS UNIFORM BUFFER ===
 	ubo := gl_materials_to_uniform_buffer_object(gl_materials)
@@ -100,9 +103,18 @@ load_model :: proc(obj_file_path: string) -> (model: FinalModel, ok: bool)
 		return
 	}
 
-	return FinalModel{gl_model, model_pos, gl_materials, ubo, gl_textures}, true
+	return FinalModel{gl_model, model_pos, gl_materials, gl_materials_by_index, ubo, gl_textures}, true
 }
 
+@(private="file")
+get_materials_by_index :: proc(materials: ^map[string]GlMaterial) -> []^GlMaterial
+{
+	materials_by_index := make([]^GlMaterial, len(materials))
+	for _, &material in materials {
+		materials_by_index[material.index] = &material
+	}
+	return materials_by_index
+}
 
 @(private="file")
 set_camera_and_light_pos :: proc(obj_data: WavefrontObjData)
