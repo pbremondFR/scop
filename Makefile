@@ -25,5 +25,8 @@ $(TARGET): $(SRC)
 $(TARGET_DEBUG): $(SRC)
 	odin build $(SRC_DIR) -debug -out:$(TARGET_DEBUG)
 
+demo: all
+	./$(TARGET) resources/cube.obj
+
 fclean:
 	rm $(TARGET)

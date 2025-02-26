@@ -52,6 +52,7 @@ State :: struct {
 state := State{
 	window_size = {1024, 1024},
 	fov = math.to_radians_f32(70.0),
+	enable_model_spin = true,
 	shader_program = .DefaultShader,
 	normals_view_length = 1.0,
 	show_textures = true,
@@ -137,8 +138,8 @@ main :: proc() {
 	defer delete_FinalModel(&main_model)
 
 	// Enable backface culling
-	// gl.Enable(gl.CULL_FACE)
-	// gl.CullFace(gl.BACK)
+	gl.Enable(gl.CULL_FACE)
+	gl.CullFace(gl.BACK)
 
 	gl.Enable(gl.BLEND);
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

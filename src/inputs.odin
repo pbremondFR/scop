@@ -68,7 +68,7 @@ key_callback :: proc "c" (window: glfw.WindowHandle, key, scancode, action, mods
 	if key == glfw.KEY_ESCAPE {
 		glfw.SetWindowShouldClose(window, true)
 	}
-	else if key == glfw.KEY_ENTER && action == glfw.PRESS {
+	else if key == glfw.KEY_TAB && action == glfw.PRESS {
 		// Static variables are like in C
 		@(static) wireframe := false
 		wireframe = !wireframe

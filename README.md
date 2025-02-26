@@ -33,7 +33,7 @@ This was my first even time using a 3D API like OpenGL. I also used this project
 - `R`: Toggle rotation
 - `T`: Toggle textures
 - `F`: Move light to current position
-- `Enter`: Toggle wireframe
+- `Tab`: Toggle wireframe
 - `N`: Show vertex normal vectors, if they are present
 - `<`/`>`: Adjust size of vertex normal vectors
 - `1`/`2`/`3`/`4`: Change active shader:
