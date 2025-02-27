@@ -141,6 +141,9 @@ VertexData :: struct #packed {
 	material_idx: u32,
 	norm: Vec3f,
 	tangent: Vec3f,
+	// XXX: It is probably better to calculate the bitangent in the shader
+	// rather than eat VRAM & bandwidth by precomputing it in the CPU.
+	// So this variable would be removed from the struct.
 	bitangent: Vec3f,
 }
 

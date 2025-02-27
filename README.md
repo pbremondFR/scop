@@ -1,9 +1,13 @@
 <h1 align="center">scop</h1>
 
 <h3 align="center">Baby's first 3D steps</h3>
+<p align="center">
+	<img src="resources/readme/grade.svg" />
+	<img src="resources/readme/made-with-odin.svg" />
+</p>
 
 <p align="center">
-  <img src="resources/readme/preview.png" />
+	<img src="resources/readme/preview.png" />
 </p>
 
 `scop` is a small project in the 42 cursus that introduces us to the world of 3D rendering. Essentially, the following is required:
@@ -12,7 +16,7 @@
 - **No libraries** to load the object, make the matrices, load shaders, textures...
 - External libraries are *only* allowed to handle the window and the events (glfw...).
 
-For fun and to explore 3D rendering, I added the following features as bonuses:
+I overdid it a little. For fun and to explore 3D rendering, I added the following features as bonuses:
 - Blinn-Phong lighting model: ambient, diffuse and specular lighting.
 - Wavefront material support: load material properties and textures from file.
 - Rendering an object that has multiple materials.
@@ -23,7 +27,7 @@ For fun and to explore 3D rendering, I added the following features as bonuses:
 - FPS-style camera controls that are roll-stabilized, for natural movement.
 - Cross-platform support (didn't have to do much, thanks Odin!).
 
-This was my first even time using a 3D API like OpenGL. I also used this project to try out Odin, since it looked like an interesting language and a good fit. tl:dr: Odin is great, and I'll use it again!
+This was my first time using a 3D API like OpenGL. I also used this project to try out Odin, since it looked like an interesting language and a good fit. tl;dr: Odin is great, and I'll use it again!
 
 ### Controls
 - `WASD`: Move camera horizontally
@@ -47,6 +51,6 @@ You need [Odin](https://odin-lang.org/) installed. Then, just run the build scri
 
 This project was last built for and with Odin release `dev-2025-02`.
 
-### Examples:
+### Showcase:
 <img src="resources/readme/normal_map.png" />
 A free F-15E model I found online, with normal maps applied.
